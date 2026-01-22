@@ -1,10 +1,11 @@
 import 'dotenv/config'
 import { createServer } from 'node:http'
-import app from './app.js'
+import app, { mongoReady } from './app.js'
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000
 
 const server = createServer(app)
+await mongoReady
 
 server.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`)

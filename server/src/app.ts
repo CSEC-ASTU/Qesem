@@ -5,11 +5,19 @@ import uploadRouter from './routes/upload.js'
 import questionRouter from './routes/question.js'
 import quizRouter from './routes/quiz.js'
 import mongoose from 'mongoose'
+import 'dotenv/config'
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/qesem'
+const MONGODB_URI = process.env.MONGODB_URI!;
 
-mongoose.connect(MONGO_URI).catch((err) => {
+if (!MONGODB_URI) {
+	throw new Error('MONGODB_URI environment variable is not set');
+}
+
+export const mongoReady = mongoose.connect(MONGODB_URI).then(() => {
+	console.log(`MongoDB connected`)
+}).catch((err) => {
 	console.error('Mongo connection error', err)
+	throw err
 })
 
 const app = express()
