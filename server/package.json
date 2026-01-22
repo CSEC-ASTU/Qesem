@@ -1,0 +1,50 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "AI Study Assistant allows students to upload their course materials and interact with an intelligent assistant",
+  "keywords": [
+    "mern",
+    "typescript",
+    "ai-study-assistant",
+    "rag",
+    "retrieval-augmented-generation",
+    "agentic-ai",
+    "ai-agents",
+    "langchain",
+    "langgraph",
+    "server-sent-events",
+    "sse",
+    "streaming-ui",
+    "vector-search",
+    "mongodb-atlas",
+    "openai",
+    "gemini-pro",
+    "edtech",
+    "personalized-learning",
+    "semantic-search",
+    "intelligent-tutoring"
+  ],
+  "homepage": "https://github.com/CSEC-ASTU/Qesem#readme",
+  "bugs": {
+    "url": "https://github.com/CSEC-ASTU/Qesem/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CSEC-ASTU/Qesem.git"
+  },
+  "license": "MIT",
+  "author": "Fuad and Chala",
+  "type": "module",
+  "main": "server.ts",
+  "scripts": {
+    "dev": "ts-node src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "mongoose": "^9.1.5",
+    "zod": "^4.3.5"
+  }
+}
