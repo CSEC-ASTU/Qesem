@@ -56,3 +56,19 @@ export async function vectorSearchChunks(query: string, options: VectorSearchOpt
   return DocumentChunk.aggregate(pipeline as any).exec()
 }
 
+
+export interface GuardResult {
+  allowed: boolean
+  message?: string
+}
+
+/**
+ * Prevent hallucinated answers by requiring non-empty retrieval results.
+ */
+export function guardRetrievedChunks<T>(retrievedChunks: T[]): GuardResult {
+  if (!Array.isArray(retrievedChunks) || retrievedChunks.length === 0) {
+    return { allowed: false, message: 'I can’t find this in your notes.' }
+  }
+  return { allowed: true }
+}
+
