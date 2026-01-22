@@ -14,7 +14,7 @@ export async function embedText(text: string, options: EmbedOptions = {}): Promi
   if (!text?.trim()) return []
 
   const apiKey = options.apiKey ?? process.env.VOYAGE_API_KEY
-  const model = options.model ?? process.env.VOYAGE_EMBED_MODEL ?? 'voyage-3.5-lite'
+  const model = options.model ?? process.env.VOYAGE_EMBED_MODEL ?? 'voyage-4-lite'
   const baseUrl = options.baseUrl ?? 'https://api.voyageai.com/v1'
   const inputType = options.inputType ?? 'document'
   const outputDimension = options.outputDimension
