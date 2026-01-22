@@ -7,10 +7,10 @@ import quizRouter from './routes/quiz.js'
 import mongoose from 'mongoose'
 import 'dotenv/config'
 
-const MONGODB_URI = process.env.MONGODB_URI!;
+const MONGODB_URI = process.env.MONGODB_URI
 
 if (!MONGODB_URI) {
-	throw new Error('MONGODB_URI environment variable is not set');
+	throw new Error('MONGODB_URI environment variable is not set')
 }
 
 export const mongoReady = mongoose.connect(MONGODB_URI).then(() => {

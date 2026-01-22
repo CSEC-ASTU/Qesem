@@ -1,4 +1,3 @@
-import 'dotenv/config'
 import { createServer } from 'node:http'
 import app, { mongoReady } from './app.js'
 
