@@ -1,4 +1,6 @@
 import { Router } from 'express'
+import { vectorSearchChunks } from '../utils/rag.js'
+import { formatSourcesForClient } from '../utils/sources.js'
 
 const router = Router()
 
@@ -18,6 +20,7 @@ router.get('/', async (req, res) => {
 
   const message = (req.query.message as string) || 'Analyzing your request'
   const answer = (req.query.answer as string) || 'This is a streamed answer.'
+  const query = (req.query.query as string) || ''
 
   try {
     // 1) Agent step
@@ -32,7 +35,14 @@ router.get('/', async (req, res) => {
       await new Promise((r) => setTimeout(r, 30))
     }
 
-    // 3) Done
+    // 3) If query provided, include sources attribution
+    if (query && query.trim()) {
+      const retrieved = await vectorSearchChunks(query, { topK: 5 })
+      const sources = formatSourcesForClient(retrieved)
+      writeEvent(res, { type: 'SOURCES', sources })
+    }
+
+    // 4) Done
     writeEvent(res, { type: 'DONE' })
   } catch (err) {
     writeEvent(res, { type: 'ERROR', error: 'Stream failed' })
