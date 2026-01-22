@@ -16,7 +16,7 @@ export async function vectorSearchChunks(query: string, options: VectorSearchOpt
   const threshold = options.similarityThreshold ?? 0.3
   const topK = options.topK ?? 3
   const numCandidates = options.numCandidates ?? Math.max(topK * 20, 100)
-  const index = options.indexName ?? process.env.MONGO_VECTOR_INDEX ?? 'vector-index'
+  const index = options.indexName ?? process.env.MONGO_VECTOR_INDEX ?? 'vector_index'
   const filter = options.filter
 
   if (!query.trim()) return []
