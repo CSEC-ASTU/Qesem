@@ -5,8 +5,8 @@ import { postUpload } from '../controllers/uploadController.js'
 const upload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype !== 'application/pdf') {
-      return cb(new Error('Only PDF files are allowed'))
+    if (!['application/pdf', 'text/plain'].includes(file.mimetype)) {
+      return cb(new Error('Only PDF or TXT files are allowed'))
     }
     cb(null, true)
   },

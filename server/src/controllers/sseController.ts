@@ -1,5 +1,9 @@
 import { Request, Response } from 'express'
-import { getSourcesForQuery } from '../services/retrievalService.js'
+import { detectIntent } from '../utils/intent.js'
+import { streamExplainAnswer } from '../services/explainService.js'
+import { retrieveChunks } from '../services/retrievalService.js'
+import { formatSourcesForClient } from '../utils/sources.js'
+import { buildQuizFromChunks } from '../services/quizService.js'
 
 function writeEvent(res: Response, payload: unknown) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`)
@@ -14,28 +18,29 @@ export async function getSSE(req: Request, res: Response) {
   // Prevent request from timing out during streaming
   req.socket.setTimeout(0)
 
-  const message = (req.query.message as string) || 'Analyzing your request'
-  const answer = (req.query.answer as string) || 'This is a streamed answer.'
   const query = (req.query.query as string) || ''
+  const level = (req.query.level as string) || 'ELI5'
+  const mode = (req.query.mode as string) || 'explain'
+  const desiredQuizCount = Number(req.query.count) || 5
 
   try {
-    // 1) Agent step
-    writeEvent(res, { type: 'AGENT_STEP', message })
+    const intent = detectIntent({ mode })
 
-    // 2) Stream tokens for the answer
-    const tokens = answer.split(/\s+/).filter(Boolean)
-    for (const t of tokens) {
-      writeEvent(res, { type: 'ANSWER_TOKEN', token: t })
-      await new Promise((r) => setTimeout(r, 30))
-    }
-
-    // 3) If query provided, include sources attribution
-    if (query && query.trim()) {
-      const sources = await getSourcesForQuery(query, 5)
+    if (intent === 'QUIZ') {
+      const retrieved = query ? await retrieveChunks(query, 8) : []
+      const sources = formatSourcesForClient(retrieved)
+      const questions = buildQuizFromChunks(retrieved.map((c) => ({ content: c.content })), desiredQuizCount)
+      writeEvent(res, { type: 'AGENT_STEP', message: 'Generating quiz from your notes...' })
+      writeEvent(res, { type: 'QUIZ', questions })
       writeEvent(res, { type: 'SOURCES', sources })
+      writeEvent(res, { type: 'DONE' })
+      return
     }
 
-    // 4) Done
+    // EXPLAIN FLOW
+    for await (const event of streamExplainAnswer(query, level as any)) {
+      writeEvent(res, event)
+    }
     writeEvent(res, { type: 'DONE' })
   } catch (_err) {
     writeEvent(res, { type: 'ERROR', error: 'Stream failed' })
