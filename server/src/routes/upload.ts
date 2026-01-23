@@ -2,6 +2,7 @@ import { Router } from 'express'
 import multer from 'multer'
 import { postUpload } from '../controllers/uploadController.js'
 
+const maxUploadMb = Number(process.env.MAX_UPLOAD_MB ?? '5')
 const upload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
@@ -10,7 +11,7 @@ const upload = multer({
     }
     cb(null, true)
   },
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: Math.max(1, maxUploadMb) * 1024 * 1024 } // default 5MB, configurable via MAX_UPLOAD_MB
 })
 
 const router = Router()
