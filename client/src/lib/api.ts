@@ -12,6 +12,15 @@ const RawSessionSchema = z.object({
   topic: z.string().optional(),
   summary: z.string().optional(),
   createdAt: z.string().optional(),
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant", "system"]),
+        content: z.string(),
+        createdAt: z.union([z.string(), z.number(), z.date()]).optional(),
+      })
+    )
+    .optional(),
 });
 
 export type Session = {
@@ -20,9 +29,21 @@ export type Session = {
   time?: string;
 };
 
+export type SessionMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+  createdAt: string;
+};
+
 const SessionsResponseSchema = z.object({
   ok: z.boolean(),
   sessions: z.array(RawSessionSchema).optional(),
+  error: z.string().optional(),
+});
+
+const SessionResponseSchema = z.object({
+  ok: z.boolean(),
+  session: RawSessionSchema.optional(),
   error: z.string().optional(),
 });
 
@@ -56,15 +77,49 @@ export const ChatResponseSchema = z.object({
 
 export type ChatResponse = z.infer<typeof ChatResponseSchema>;
 
-const ChatEventSchema = z.object({
-  type: z.string(),
-  result: z.unknown().optional(),
-  retrieved: z.array(z.unknown()).optional(),
-  mode: z.string().optional(),
+export const ChatEventSchema = z
+  .object({
+    type: z.string(),
+    message: z.string().optional(),
+    token: z.string().optional(),
+    questions: z.array(z.unknown()).optional(),
+    sources: z.array(z.unknown()).optional(),
+    result: z.unknown().optional(),
+    retrieved: z.array(z.unknown()).optional(),
+    mode: z.string().optional(),
+    error: z.string().optional(),
+  })
+  .passthrough();
+
+export type ChatEvent = z.infer<typeof ChatEventSchema>;
+
+const QuizEvaluationResponseSchema = z.object({
+  ok: z.boolean(),
+  attemptId: z.string().optional(),
+  score: z.number().optional(),
+  weakAreas: z.array(z.string()).optional(),
+  feedback: z
+    .array(
+      z.object({
+        questionId: z.string(),
+        result: z.string().optional(),
+        explanation: z.string().optional(),
+      })
+    )
+    .optional(),
+  questions: z
+    .array(
+      z.object({
+        questionId: z.string(),
+        result: z.string().optional(),
+        feedback: z.string().optional(),
+      })
+    )
+    .optional(),
   error: z.string().optional(),
 });
 
-export type ChatEvent = z.infer<typeof ChatEventSchema>;
+export type QuizEvaluationResponse = z.infer<typeof QuizEvaluationResponseSchema>;
 
 async function safeFetch<T>(
   input: RequestInfo | URL,
@@ -106,6 +161,31 @@ export async function listSessions(): Promise<{ ok: boolean; sessions: Session[]
   return { ok: true, sessions };
 }
 
+export async function fetchSession(
+  id: string
+): Promise<{ ok: boolean; session?: { id: string; title: string; time?: string; messages: SessionMessage[] }; error?: string }> {
+  const result = await safeFetch(buildUrl(`/sessions/${id}`), { method: "GET" }, SessionResponseSchema);
+  if (!result.ok || !result.data.session) {
+    return { ok: false, error: result.ok ? "Session not found" : result.error };
+  }
+
+  const messages: SessionMessage[] = (result.data.session.messages ?? []).map((m) => ({
+    role: m.role,
+    content: m.content,
+    createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
+  }));
+
+  return {
+    ok: true,
+    session: {
+      id: result.data.session.id ?? result.data.session._id ?? id,
+      title: result.data.session.topic ?? "Untitled session",
+      time: result.data.session.createdAt,
+      messages,
+    },
+  };
+}
+
 export async function sendChat(payload: ChatRequest): Promise<{ ok: boolean; response?: ChatResponse; error?: string }> {
   const validated = ChatRequestSchema.safeParse(payload);
   if (!validated.success) {
@@ -126,7 +206,8 @@ export async function sendChat(payload: ChatRequest): Promise<{ ok: boolean; res
 
 export async function streamChat(
   payload: ChatRequest,
-  onEvent: (evt: ChatEvent) => void
+  onEvent: (evt: ChatEvent) => void,
+  options?: { signal?: AbortSignal }
 ): Promise<void> {
   const validated = ChatRequestSchema.safeParse({ ...payload, stream: true });
   if (!validated.success) {
@@ -137,6 +218,7 @@ export async function streamChat(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(validated.data),
+    signal: options?.signal,
   });
 
   if (!res.ok || !res.body) {
@@ -170,109 +252,74 @@ export async function streamChat(
   }
 }
 
-const SessionDetailSchema = z.object({
-  ok: z.boolean(),
-  session: z.object({
-    id: z.string().optional(),
-    _id: z.string().optional(),
-    messages: z.array(
-      z.object({
-        role: z.string(),
-        content: z.string(),
-        createdAt: z.string().optional(),
-      })
-    ),
-  }).optional(),
-  error: z.string().optional(),
-});
-
-export const MessageSchema = z.object({
-  role: z.string(),
-  content: z.string(),
-  createdAt: z.string().optional(),
-});
-
-export type Message = z.infer<typeof MessageSchema>;
-
-export async function getSessionById(
-  id: string
-): Promise<{ ok: boolean; messages: Message[]; error?: string }> {
-  const result = await safeFetch(
-    buildUrl(`/sessions/${id}`),
-    { method: "GET" },
-    SessionDetailSchema
-  );
-
-  if (!result.ok) {
-    return { ok: false, messages: [], error: result.error };
-  }
-
-  if (!result.data.session) {
-    return { ok: false, messages: [], error: result.data.error ?? "Session not found" };
-  }
-
-  return {
-    ok: true,
-    messages: result.data.session.messages,
-  };
-}
-
-const UploadResponseSchema = z.object({
-  ok: z.boolean(),
-  fileUrl: z.string().optional(),
-  error: z.string().optional(),
-});
-
-export async function uploadFile(
-  file: File
-): Promise<{ ok: boolean; fileUrl?: string; error?: string }> {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  const result = await safeFetch(
-    buildUrl("/upload"),
-    {
-      method: "POST",
-      body: formData,
-    },
-    UploadResponseSchema
-  );
-
-  if (!result.ok) return { ok: false, error: result.error };
-
-  return {
-    ok: true,
-    fileUrl: result.data.fileUrl,
-  };
-}
-
-const QuizEvalResponseSchema = z.object({
-  ok: z.boolean(),
-  score: z.number().optional(),
-  feedback: z.string().optional(),
-  error: z.string().optional(),
-});
-
-export async function evaluateQuiz(
+export async function evaluateQuizAttempt(
   attemptId: string,
-  responses: { questionId: string; answer: string }[]
-): Promise<{ ok: boolean; score?: number; feedback?: string; error?: string }> {
+  responses: Array<{ questionId: string; answer: string }>
+): Promise<{ ok: boolean; result?: QuizEvaluationResponse; error?: string }> {
+  const payload = { attemptId, responses };
   const result = await safeFetch(
-    buildUrl("/quiz/evaluate"),
+    buildUrl("/quiz/auto/evaluate"),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ attemptId, responses }),
+      body: JSON.stringify(payload),
     },
-    QuizEvalResponseSchema
+    QuizEvaluationResponseSchema
   );
-
   if (!result.ok) return { ok: false, error: result.error };
-
-  return {
-    ok: true,
-    score: result.data.score,
-    feedback: result.data.feedback,
-  };
+  return { ok: true, result: result.data };
 }
 
+const ChatMessageSchema = z.object({
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string(),
+  createdAt: z.union([z.string(), z.number(), z.date()]).optional(),
+});
+
+const SessionMutationResponseSchema = z.object({
+  ok: z.boolean(),
+  session: RawSessionSchema.optional(),
+  error: z.string().optional(),
+});
+
+export async function createSession(payload: {
+  topic?: string;
+  messages: Array<{ role: "user" | "assistant" | "system"; content: string; createdAt?: string | number | Date }>;
+  summary?: unknown;
+}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const messagesParsed = z.array(ChatMessageSchema).safeParse(payload.messages);
+  if (!messagesParsed.success) return { ok: false, error: "Invalid messages" };
+
+  const result = await safeFetch(
+    buildUrl("/sessions"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic: payload.topic, messages: messagesParsed.data, summary: payload.summary }),
+    },
+    SessionMutationResponseSchema
+  );
+  if (!result.ok || !result.data.session) return { ok: false, error: result.ok ? "Session create failed" : result.error };
+  const id = result.data.session.id ?? result.data.session._id;
+  return id ? { ok: true, sessionId: id } : { ok: false, error: "Missing session id" };
+}
+
+export async function appendSession(
+  id: string,
+  messages: Array<{ role: "user" | "assistant" | "system"; content: string; createdAt?: string | number | Date }>
+): Promise<{ ok: boolean; error?: string }> {
+  const messagesParsed = z.array(ChatMessageSchema).safeParse(messages);
+  if (!messagesParsed.success) return { ok: false, error: "Invalid messages" };
+
+  const result = await safeFetch(
+    buildUrl(`/sessions/${id}/resume`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: messagesParsed.data }),
+    },
+    SessionMutationResponseSchema
+  );
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true };
+}
