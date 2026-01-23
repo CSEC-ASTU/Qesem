@@ -10,7 +10,7 @@ const RawSessionSchema = z.object({
   _id: z.string().optional(),
   id: z.string().optional(),
   topic: z.string().optional(),
-  summary: z.any().optional(),
+  summary: z.string().optional(),
   createdAt: z.string().optional(),
 });
 
@@ -169,3 +169,52 @@ export async function streamChat(
     }
   }
 }
+
+const SessionDetailSchema = z.object({
+  ok: z.boolean(),
+  session: z.object({
+    id: z.string().optional(),
+    _id: z.string().optional(),
+    messages: z.array(
+      z.object({
+        role: z.string(),
+        content: z.string(),
+        createdAt: z.string().optional(),
+      })
+    ),
+  }).optional(),
+  error: z.string().optional(),
+});
+
+export const MessageSchema = z.object({
+  role: z.string(),
+  content: z.string(),
+  createdAt: z.string().optional(),
+});
+
+export type Message = z.infer<typeof MessageSchema>;
+
+export async function getSessionById(
+  id: string
+): Promise<{ ok: boolean; messages: Message[]; error?: string }> {
+  const result = await safeFetch(
+    buildUrl(`/sessions/${id}`),
+    { method: "GET" },
+    SessionDetailSchema
+  );
+
+  if (!result.ok) {
+    return { ok: false, messages: [], error: result.error };
+  }
+
+  if (!result.data.session) {
+    return { ok: false, messages: [], error: result.data.error ?? "Session not found" };
+  }
+
+  return {
+    ok: true,
+    messages: result.data.session.messages,
+  };
+}
+
+
