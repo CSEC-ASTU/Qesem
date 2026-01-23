@@ -3,6 +3,8 @@ import { guardRetrievedChunks, RetrievedChunk } from '../utils/rag.js'
 import { getSourcesForQuery, retrieveChunks } from './retrievalService.js'
 import { completeChat, streamChatCompletion } from './llmService.js'
 import { formatSourcesForClient, SourceItem } from '../utils/sources.js'
+import { generateExplainSuggestions } from './suggestionService.js'
+
 
 interface ExplainPrep {
   prompt?: string
@@ -40,7 +42,14 @@ export async function getExplainAnswer(question: string, level: ExplainLevel) {
   }
 
   const answer = await completeChat(prep.prompt)
-  return { answer, sources: prep.sources, retrieved: prep.retrieved, guardFailed: false }
+  return {
+    answer,
+    sources: prep.sources,
+    retrieved: prep.retrieved,
+    guardFailed: false,
+    suggestions: generateExplainSuggestions()
+  }
+
 }
 
 export async function* streamExplainAnswer(question: string, level: ExplainLevel) {
