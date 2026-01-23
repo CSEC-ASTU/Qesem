@@ -4,6 +4,8 @@ import {
   evaluateQuizAttempt,
   fetchSession,
   listSessions,
+  createSession,
+  appendSession,
   streamChat,
   type ChatEvent,
   type ChatRequest,
@@ -90,8 +92,16 @@ function App() {
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
   const [grading, setGrading] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+  const persistedCountRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -146,6 +156,7 @@ function App() {
         }))
         .sort((a, b) => a.createdAt - b.createdAt);
       setMessages(mapped);
+      persistedCountRef.current = mapped.length;
     } else {
       setError(result.error ?? "Failed to load session");
     }
@@ -158,6 +169,10 @@ function App() {
     setError(null);
     setStatusNote("Thinking…");
     clearQuiz();
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     const userId = crypto.randomUUID();
     const assistantId = crypto.randomUUID();
@@ -179,66 +194,76 @@ function App() {
     const payload: ChatRequest = { question: trimmed, level };
 
     try {
-      await streamChat(payload, (evt: ChatEvent) => {
-        if (evt.error) {
-          setError(evt.error);
-          updateMessage(assistantId, { content: evt.error, streaming: false });
-          return;
-        }
-        if (evt.type === "ANSWER_TOKEN" && typeof evt.token === "string") {
-          appendMessage(assistantId, evt.token);
-          return;
-        }
-        if (evt.type === "AGENT_STEP" && evt.message) {
-          setStatusNote(
-            typeof evt.message === "string"
-              ? evt.message
-              : "Working through your notes…",
-          );
-          return;
-        }
-        if (evt.result) {
-          if (isQuizGeneration(evt.result)) {
-            const questions = evt.result.questions.map((q) => ({
-              questionId: q.questionId,
-              prompt: q.prompt,
-              type: q.type,
-              options: q.options,
-            }));
-            setQuizState({ questions, attemptId: evt.result.attemptId });
+      await streamChat(
+        payload,
+        (evt: ChatEvent) => {
+          if (evt.error) {
+            setError(evt.error);
             updateMessage(assistantId, {
-              content: `Generated a ${questions.length}-question quiz. Fill it out below.`,
+              content: evt.error,
               streaming: false,
             });
             return;
           }
-          if (isQuizEvaluation(evt.result)) {
-            setQuizState({
-              questions: quizQuestions,
-              attemptId: evt.result.attemptId ?? quizAttemptId,
-              result: {
+          if (evt.type === "ANSWER_TOKEN" && typeof evt.token === "string") {
+            appendMessage(assistantId, evt.token);
+            return;
+          }
+          if (evt.type === "AGENT_STEP" && evt.message) {
+            setStatusNote(
+              typeof evt.message === "string"
+                ? evt.message
+                : "Working through your notes…",
+            );
+            return;
+          }
+          if (evt.result) {
+            if (isQuizGeneration(evt.result)) {
+              const questions = evt.result.questions.map((q) => ({
+                questionId: q.questionId,
+                prompt: q.prompt,
+                type: q.type,
+                options: q.options,
+              }));
+              setQuizState({ questions, attemptId: evt.result.attemptId });
+              updateMessage(assistantId, {
+                content: `Generated a ${questions.length}-question quiz. Fill it out below.`,
+                streaming: false,
+              });
+              return;
+            }
+            if (isQuizEvaluation(evt.result)) {
+              setQuizState({
+                questions: quizQuestions,
                 attemptId: evt.result.attemptId ?? quizAttemptId,
-                score: evt.result.score,
-                feedback: (evt.result.feedback || []).map((f) => ({
-                  questionId: f.questionId,
-                  result: f.result ?? "Pending",
-                  explanation: f.explanation,
-                })),
-                weakAreas: evt.result.weakAreas,
-              },
-            });
-            updateMessage(assistantId, {
-              content: `Quiz graded. Score: ${Math.round((evt.result.score ?? 0) * 100) / 100}%`,
-              streaming: false,
-            });
-            return;
-          }
+                result: {
+                  attemptId: evt.result.attemptId ?? quizAttemptId,
+                  score: evt.result.score,
+                  feedback: (evt.result.feedback || []).map((f) => ({
+                    questionId: f.questionId,
+                    result: f.result ?? "Pending",
+                    explanation: f.explanation,
+                  })),
+                  weakAreas: evt.result.weakAreas,
+                },
+              });
+              updateMessage(assistantId, {
+                content: `Quiz graded. Score: ${Math.round((evt.result.score ?? 0) * 100) / 100}%`,
+                streaming: false,
+              });
+              return;
+            }
 
-          const content = formatResult(evt.result);
-          appendMessage(assistantId, content);
-        }
-      });
+            const content = formatResult(evt.result);
+            appendMessage(assistantId, content);
+          }
+        },
+        { signal: controller.signal },
+      );
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Failed to send message";
       setError(msg);
       updateMessage(assistantId, { content: msg, streaming: false });
@@ -246,6 +271,51 @@ function App() {
       setStreaming(false);
       updateMessage(assistantId, { streaming: false });
       setStatusNote(null);
+      abortRef.current = null;
+
+      // Persist session/history
+      const outboundMessages = useChatStore.getState().messages;
+      const newMessages = outboundMessages.slice(persistedCountRef.current);
+      if (newMessages.length > 0) {
+        if (!activeSessionId) {
+          const created = await createSession({
+            topic: outboundMessages[0]?.content ?? "New chat",
+            messages: outboundMessages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              createdAt: m.createdAt,
+            })),
+          });
+          if (created.ok && created.sessionId) {
+            setActiveSession(created.sessionId);
+            setSessions([
+              {
+                id: created.sessionId,
+                title: outboundMessages[0]?.content ?? "New chat",
+                time: new Date().toISOString(),
+              },
+              ...sessions,
+            ]);
+            persistedCountRef.current = outboundMessages.length;
+          } else if (created.error) {
+            setError((prev) => prev ?? created.error ?? null);
+          }
+        } else {
+          const appended = await appendSession(
+            activeSessionId,
+            newMessages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              createdAt: m.createdAt,
+            })),
+          );
+          if (!appended.ok && appended.error) {
+            setError((prev) => prev ?? appended.error ?? null);
+          } else {
+            persistedCountRef.current = outboundMessages.length;
+          }
+        }
+      }
     }
   }
 
@@ -253,6 +323,7 @@ function App() {
     resetMessages();
     setActiveSession(undefined);
     clearQuiz();
+    persistedCountRef.current = 0;
   }
 
   async function handleQuizSubmit() {
@@ -295,16 +366,16 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex">
+    <div className="min-h-screen bg-slate-100 text-slate-900 flex">
       <aside
         className={`${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 fixed md:static inset-y-0 left-0 z-20 w-72 bg-slate-900/70 backdrop-blur border-r border-slate-800 shadow-2xl md:shadow-none transition-transform duration-200 ease-out flex flex-col`}
+        } md:translate-x-0 fixed md:static inset-y-0 left-0 z-20 w-72 bg-white border-r border-slate-200 shadow-lg md:shadow-none transition-transform duration-200 ease-out flex flex-col`}
       >
-        <div className="flex items-center justify-between px-4 h-14 border-b border-slate-800">
+        <div className="flex items-center justify-between px-4 h-14 border-b border-slate-200">
           <span className="font-semibold">Sessions</span>
           <button
-            className="md:hidden text-sm text-slate-400"
+            className="md:hidden text-sm text-slate-500"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close sidebar"
           >
@@ -318,8 +389,8 @@ function App() {
               onClick={() => {
                 handleSelectSession(s.id);
               }}
-              className={`w-full text-left px-4 py-3 border-b border-slate-800/80 hover:bg-slate-800/60 transition ${
-                s.id === activeSessionId ? "bg-slate-800" : ""
+              className={`w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition ${
+                s.id === activeSessionId ? "bg-slate-100" : ""
               }`}
             >
               <div className="font-medium line-clamp-1">{s.title}</div>
@@ -329,21 +400,21 @@ function App() {
             </button>
           ))}
         </div>
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-200">
           <button
             onClick={handleNewChat}
-            className="w-full rounded-lg bg-emerald-500 text-slate-950 py-2.5 text-sm font-semibold hover:bg-emerald-400 transition"
+            className="w-full rounded-lg bg-slate-900 text-white py-2.5 text-sm font-semibold hover:bg-slate-800 transition"
           >
             + New chat
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-h-screen">
-        <header className="flex items-center justify-between px-4 md:px-6 h-14 border-b border-slate-800 bg-slate-900/70 backdrop-blur">
+      <main className="flex-1 flex flex-col min-h-screen bg-slate-50">
+        <header className="flex items-center justify-between px-4 md:px-6 h-14 border-b border-slate-200 bg-white">
           <div className="flex items-center gap-3">
             <button
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700"
+              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-700"
               onClick={() => setSidebarOpen((v) => !v)}
               aria-label="Toggle sidebar"
             >
@@ -356,7 +427,7 @@ function App() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-xs font-semibold text-amber-400">
+          <div className="flex items-center gap-3 text-xs font-semibold text-amber-600">
             {statusNote && <span className="animate-pulse">{statusNote}</span>}
             {streaming && (
               <span className="px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/30">
@@ -376,8 +447,8 @@ function App() {
                 key={m.id}
                 className={`max-w-3xl rounded-2xl border px-4 py-3 shadow-sm ${
                   m.role === "user"
-                    ? "bg-slate-100 text-slate-900 border-slate-200 ml-auto"
-                    : "bg-slate-900/60 text-slate-50 border-slate-800"
+                    ? "bg-white text-slate-900 border-slate-200 ml-auto"
+                    : "bg-slate-100 text-slate-900 border-slate-200"
                 }`}
               >
                 <div className="text-xs font-semibold mb-1 uppercase tracking-wide text-slate-500">
@@ -389,27 +460,27 @@ function App() {
               </div>
             ))}
             {messages.length === 0 && (
-              <div className="text-sm text-slate-400 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <div className="text-sm text-slate-600 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 Ask anything about your notes, request a quiz, or paste quiz
                 answers to grade them.
               </div>
             )}
 
             {quizQuestions.length > 0 && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 shadow-xl p-5 space-y-3">
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-lg p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm font-semibold">
                       Quiz ready ({quizQuestions.length} questions)
                     </div>
-                    <div className="text-xs text-slate-400">
+                    <div className="text-xs text-slate-500">
                       Generated from your notes. Fill answers then grade.
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={clearQuiz}
-                    className="text-xs rounded-lg border border-slate-700 px-3 py-1 text-slate-300 hover:bg-slate-800"
+                    className="text-xs rounded-lg border border-slate-200 px-3 py-1 text-slate-600 hover:bg-slate-100"
                   >
                     Clear quiz
                   </button>
@@ -424,9 +495,9 @@ function App() {
                     return (
                       <div
                         key={q.questionId}
-                        className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-2"
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2"
                       >
-                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                           <span className="text-xs text-slate-500">
                             Q{idx + 1}
                           </span>
@@ -441,8 +512,8 @@ function App() {
                                 key={opt}
                                 className={`rounded-lg border px-3 py-2 text-sm cursor-pointer transition ${
                                   quizAnswers[q.questionId] === opt
-                                    ? "border-emerald-400 bg-emerald-500/10"
-                                    : "border-slate-800 hover:border-slate-700"
+                                    ? "border-emerald-400 bg-emerald-50"
+                                    : "border-slate-200 hover:border-slate-300"
                                 }`}
                               >
                                 <input
@@ -465,7 +536,7 @@ function App() {
                           </div>
                         ) : (
                           <textarea
-                            className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
                             rows={2}
                             placeholder="Type your short answer"
                             value={quizAnswers[q.questionId] || ""}
@@ -482,13 +553,13 @@ function App() {
                           <div
                             className={`text-xs font-semibold inline-flex items-center gap-2 rounded-full px-3 py-1 border ${
                               resultBadge === "Correct"
-                                ? "border-emerald-500 text-emerald-300"
-                                : "border-amber-500 text-amber-300"
+                                ? "border-emerald-500 text-emerald-700 bg-emerald-50"
+                                : "border-amber-500 text-amber-700 bg-amber-50"
                             }`}
                           >
                             {resultBadge}
                             {feedback?.explanation && (
-                              <span className="text-slate-400 font-normal">
+                              <span className="text-slate-600 font-normal">
                                 {feedback.explanation}
                               </span>
                             )}
@@ -501,11 +572,11 @@ function App() {
 
                 <div className="flex items-center justify-between gap-3">
                   {quizResult?.score !== undefined ? (
-                    <div className="text-sm text-emerald-300 font-semibold">
+                    <div className="text-sm text-emerald-700 font-semibold">
                       Score: {Math.round((quizResult.score ?? 0) * 100) / 100}%
                     </div>
                   ) : (
-                    <div className="text-xs text-slate-400">
+                    <div className="text-xs text-slate-500">
                       Answer everything, then grade.
                     </div>
                   )}
@@ -513,14 +584,14 @@ function App() {
                     type="button"
                     onClick={handleQuizSubmit}
                     disabled={grading}
-                    className="rounded-xl bg-emerald-500 text-slate-950 px-4 py-2 text-sm font-semibold shadow hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {grading ? "Grading…" : "Submit answers"}
                   </button>
                 </div>
 
                 {quizResult?.weakAreas && quizResult.weakAreas.length > 0 && (
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-200 space-y-2">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 space-y-2">
                     <div className="font-semibold">Weak areas</div>
                     <ul className="list-disc pl-4 space-y-1">
                       {quizResult.weakAreas.map((w) => (
@@ -537,7 +608,7 @@ function App() {
           </div>
         </div>
 
-        <div className="border-t border-slate-800 bg-slate-900/80 px-4 md:px-6 py-3">
+        <div className="border-t border-slate-200 bg-white px-4 md:px-6 py-3">
           <div className="max-w-4xl mx-auto">
             <ChatInput
               disabled={streaming}

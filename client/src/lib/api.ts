@@ -206,7 +206,8 @@ export async function sendChat(payload: ChatRequest): Promise<{ ok: boolean; res
 
 export async function streamChat(
   payload: ChatRequest,
-  onEvent: (evt: ChatEvent) => void
+  onEvent: (evt: ChatEvent) => void,
+  options?: { signal?: AbortSignal }
 ): Promise<void> {
   const validated = ChatRequestSchema.safeParse({ ...payload, stream: true });
   if (!validated.success) {
@@ -217,6 +218,7 @@ export async function streamChat(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(validated.data),
+    signal: options?.signal,
   });
 
   if (!res.ok || !res.body) {
@@ -266,4 +268,58 @@ export async function evaluateQuizAttempt(
   );
   if (!result.ok) return { ok: false, error: result.error };
   return { ok: true, result: result.data };
+}
+
+const ChatMessageSchema = z.object({
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string(),
+  createdAt: z.union([z.string(), z.number(), z.date()]).optional(),
+});
+
+const SessionMutationResponseSchema = z.object({
+  ok: z.boolean(),
+  session: RawSessionSchema.optional(),
+  error: z.string().optional(),
+});
+
+export async function createSession(payload: {
+  topic?: string;
+  messages: Array<{ role: "user" | "assistant" | "system"; content: string; createdAt?: string | number | Date }>;
+  summary?: unknown;
+}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const messagesParsed = z.array(ChatMessageSchema).safeParse(payload.messages);
+  if (!messagesParsed.success) return { ok: false, error: "Invalid messages" };
+
+  const result = await safeFetch(
+    buildUrl("/sessions"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic: payload.topic, messages: messagesParsed.data, summary: payload.summary }),
+    },
+    SessionMutationResponseSchema
+  );
+  if (!result.ok || !result.data.session) return { ok: false, error: result.ok ? "Session create failed" : result.error };
+  const id = result.data.session.id ?? result.data.session._id;
+  return id ? { ok: true, sessionId: id } : { ok: false, error: "Missing session id" };
+}
+
+export async function appendSession(
+  id: string,
+  messages: Array<{ role: "user" | "assistant" | "system"; content: string; createdAt?: string | number | Date }>
+): Promise<{ ok: boolean; error?: string }> {
+  const messagesParsed = z.array(ChatMessageSchema).safeParse(messages);
+  if (!messagesParsed.success) return { ok: false, error: "Invalid messages" };
+
+  const result = await safeFetch(
+    buildUrl(`/sessions/${id}/resume`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: messagesParsed.data }),
+    },
+    SessionMutationResponseSchema
+  );
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true };
 }
