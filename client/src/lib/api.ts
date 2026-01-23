@@ -246,3 +246,33 @@ export async function uploadFile(
   };
 }
 
+const QuizEvalResponseSchema = z.object({
+  ok: z.boolean(),
+  score: z.number().optional(),
+  feedback: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export async function evaluateQuiz(
+  attemptId: string,
+  responses: { questionId: string; answer: string }[]
+): Promise<{ ok: boolean; score?: number; feedback?: string; error?: string }> {
+  const result = await safeFetch(
+    buildUrl("/quiz/evaluate"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attemptId, responses }),
+    },
+    QuizEvalResponseSchema
+  );
+
+  if (!result.ok) return { ok: false, error: result.error };
+
+  return {
+    ok: true,
+    score: result.data.score,
+    feedback: result.data.feedback,
+  };
+}
+
