@@ -4,7 +4,7 @@ import { runLearningGraph, type LearningGraphState } from '../agents/learningGra
 export async function postChat(req: Request, res: Response) {
   try {
     const result: LearningGraphState = await runLearningGraph(req.body || {})
-    return res.json({ ok: true, result: result.toolResult, retrieved: result.retrievedChunks })
+    return res.json({ ok: true, result: result.toolResult, retrieved: result.retrievedChunks, mode: result.mode })
   } catch (err) {
     console.error('postChat error:', err)
     const message = err instanceof Error ? err.message : String(err)

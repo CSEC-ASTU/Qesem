@@ -1,7 +1,17 @@
 import { z } from 'zod'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { tool } from '@langchain/core/tools'
-import { Annotation, END, START, StateGraph } from '@langchain/langgraph'
+import {
+  StateGraph,
+  StateSchema,
+  MessagesValue,
+  ReducedValue,
+  START,
+  END,
+  type GraphNode,
+  type ConditionalEdgeRouter
+} from '@langchain/langgraph'
+import { SystemMessage, HumanMessage, AIMessage, ToolMessage } from '@langchain/core/messages'
 
 import { getExplainAnswer } from '../services/explainService.js'
 import { retrieveChunks } from '../services/retrievalService.js'
@@ -10,14 +20,13 @@ import { getAnswer } from '../utils/quiz.js'
 import { evaluateAnswer } from '../utils/evaluate.js'
 import QuizAttempt from '../models/QuizAttempt.js'
 
-const LearningState = Annotation.Root({
-  userInput: Annotation<any>(),
-  selectedAction: Annotation<string | undefined>(),
-  toolArgs: Annotation<Record<string, any> | undefined>(),
-  toolResult: Annotation<any>(),
-  retrievedChunks: Annotation<any[] | undefined>()
+const MessagesState = new StateSchema({
+  messages: MessagesValue,
+  llmCalls: new ReducedValue(z.number().default(0), { reducer: (x, y) => x + y }),
+  mode: new ReducedValue(z.string().optional(), { reducer: (_x, y) => y ?? _x }),
+  toolResult: new ReducedValue(z.any(), { reducer: (_x, y) => y }),
+  retrievedChunks: new ReducedValue(z.array(z.any()).optional(), { reducer: (_x, y) => y })
 })
-type LearningStateType = typeof LearningState.State
 
 const explainTool = tool(
   async ({ question, level }: { question: string; level?: string }) => {
@@ -129,14 +138,49 @@ const quizEvaluationTool = tool(
 )
 
 const tools = [explainTool, quizGenerationTool, quizEvaluationTool]
+const toolsByName = Object.fromEntries(tools.map((t) => [t.name, t]))
 
 const model = new ChatGoogleGenerativeAI({
   model: process.env.GEMINI_MODEL || 'gemini-2.5-pro',
   apiKey: process.env.GOOGLE_API_KEY,
   temperature: 0.2,
-  // Fail fast on quota errors
   maxRetries: 0
-}).bindTools(tools)
+})
+const modelWithTools = model.bindTools(tools)
+
+const llmCall: GraphNode<typeof MessagesState> = async (state) => {
+  const baseMessages = state.messages.length ? state.messages : []
+  const response = await modelWithTools.invoke([
+    new SystemMessage('You are a helpful assistant that chooses the right educational tool.'),
+    ...baseMessages
+  ])
+  return { messages: [response], llmCalls: 1, mode: 'llm' }
+}
+
+const toolNode: GraphNode<typeof MessagesState> = async (state) => {
+  const lastMessage = state.messages.at(-1)
+  if (!lastMessage || !AIMessage.isInstance(lastMessage)) {
+    return { messages: [] }
+  }
+  const toolMsgs: ToolMessage[] = []
+  let lastRaw: any = undefined
+  let lastRetrieved: any[] | undefined = undefined
+  for (const toolCall of lastMessage.tool_calls ?? []) {
+    const t = toolsByName[toolCall.name]
+    if (!t) continue
+    const raw = await (t as any).invoke(toolCall.args ?? {})
+    lastRaw = raw
+    lastRetrieved = (raw as any)?.retrieved || undefined
+    toolMsgs.push(
+      new ToolMessage({
+        tool_call_id: toolCall.id,
+        name: toolCall.name,
+        content: typeof raw === 'string' ? raw : JSON.stringify(raw)
+      })
+    )
+  }
+  return { messages: toolMsgs, toolResult: lastRaw, retrievedChunks: lastRetrieved }
+}
 
 function chooseToolByShape(input: any): { name: string; args: Record<string, any> } | null {
   if (typeof input === 'string' && input.trim()) {
@@ -156,49 +200,69 @@ function chooseToolByShape(input: any): { name: string; args: Record<string, any
   return null
 }
 
-async function agentNode(state: LearningStateType): Promise<Partial<LearningStateType>> {
-  const userInput = state.userInput
-  const prompt = typeof userInput === 'string' ? userInput : JSON.stringify(userInput)
+const fallbackToolNode: GraphNode<typeof MessagesState> = async (state) => {
+  // Find initial human message content
+  const first = state.messages.find((m: any) => HumanMessage.isInstance(m))
+  const content: any = (first as any)?.text ?? (first as any)?.content
+  let parsed: any = content
   try {
-    const res = await model.invoke([{ role: 'user', content: prompt }])
-    const call = res.tool_calls?.[0]
-    if (call) {
-      return { selectedAction: call.name, toolArgs: call.args }
-    }
-  } catch (err: any) {
-    const msg = String(err?.message || '')
-    const isQuota = err?.status === 429 || /quota|rate limit/i.test(msg)
-    if (!isQuota) {
-      throw err
-    }
+    if (typeof content === 'string') parsed = JSON.parse(content)
+  } catch (_) {
+    parsed = content
   }
-  const fallback = chooseToolByShape(userInput)
-  if (!fallback) {
-    throw new Error('Agent could not select a tool (LLM unavailable and no fallback match)')
+  const fb = chooseToolByShape(parsed)
+  if (!fb) {
+    return { messages: [], mode: 'fallback' }
   }
-  return { selectedAction: fallback.name, toolArgs: fallback.args }
+  const t = toolsByName[fb.name]
+  const raw = await (t as any).invoke(fb.args)
+  const retrieved = (raw as any)?.retrieved || undefined
+  return { messages: [], toolResult: raw, retrievedChunks: retrieved, mode: 'fallback' }
 }
 
-async function toolNode(state: LearningStateType): Promise<Partial<LearningStateType>> {
-  if (!state.selectedAction) throw new Error('No selected action to execute')
-  const t = tools.find((t) => t.name === state.selectedAction)
-  if (!t) throw new Error(`Unknown tool: ${state.selectedAction}`)
-  const result = await (t as any).invoke(state.toolArgs || {})
-  const retrieved = (result as any)?.retrieved || undefined
-  return { toolResult: result, retrievedChunks: retrieved }
+const shouldContinue = (state: any) => {
+  const lastMessage = state.messages.at(-1)
+  if (!lastMessage || !AIMessage.isInstance(lastMessage)) {
+    // If no AIMessage, attempt fallback based on shape
+    const first = state.messages.find((m: any) => HumanMessage.isInstance(m))
+    const content: any = (first as any)?.text ?? (first as any)?.content
+    let parsed: any = content
+    try {
+      if (typeof content === 'string') parsed = JSON.parse(content)
+    } catch (_) {
+      parsed = content
+    }
+    const fb = chooseToolByShape(parsed)
+    return fb ? 'fallbackToolNode' : END
+  }
+  if (lastMessage.tool_calls?.length) {
+    return 'toolNode'
+  }
+  return END
 }
 
-const workflow = new StateGraph(LearningState)
-  .addNode('agent', agentNode)
-  .addNode('tool', toolNode)
-  .addEdge(START, 'agent')
-  .addEdge('agent', 'tool')
-  .addEdge('tool', END)
+const workflow = new StateGraph(MessagesState)
+  .addNode('llmCall', llmCall)
+  .addNode('toolNode', toolNode)
+  .addNode('fallbackToolNode', fallbackToolNode)
+  .addEdge(START, 'llmCall')
+  .addConditionalEdges('llmCall', shouldContinue, ['toolNode', 'fallbackToolNode', END])
+  .addEdge('toolNode', 'llmCall')
 
 const app = workflow.compile()
 
-export type LearningGraphState = LearningStateType
+export type LearningGraphState = {
+  messages: Array<any>
+  llmCalls: number
+  mode?: string
+  toolResult?: any
+  retrievedChunks?: any[]
+}
 
 export async function runLearningGraph(input: any): Promise<LearningGraphState> {
-  return app.invoke({ userInput: input })
+  const initialMessage =
+    typeof input === 'string'
+      ? new HumanMessage(input)
+      : new HumanMessage(JSON.stringify(input))
+  return app.invoke({ messages: [initialMessage] }) as any
 }
