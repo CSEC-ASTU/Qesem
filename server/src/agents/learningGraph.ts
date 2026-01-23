@@ -150,11 +150,21 @@ const modelWithTools = model.bindTools(tools)
 
 const llmCall: GraphNode<typeof MessagesState> = async (state) => {
   const baseMessages = state.messages.length ? state.messages : []
-  const response = await modelWithTools.invoke([
-    new SystemMessage('You are a helpful assistant that chooses the right educational tool.'),
-    ...baseMessages
-  ])
-  return { messages: [response], llmCalls: 1, mode: 'llm' }
+  try {
+    const response = await modelWithTools.invoke([
+      new SystemMessage('You are a helpful assistant that chooses the right educational tool.'),
+      ...baseMessages
+    ])
+    return { messages: [response], llmCalls: 1, mode: 'llm' }
+  } catch (err: any) {
+    const msg = String(err?.message || '')
+    const isQuota = err?.status === 429 || /quota|rate limit/i.test(msg)
+    if (isQuota) {
+      // Keep messages as-is so fallback can inspect the human input
+      return { messages: [], llmCalls: 0, mode: 'fallback' }
+    }
+    throw err
+  }
 }
 
 const toolNode: GraphNode<typeof MessagesState> = async (state) => {
@@ -173,7 +183,7 @@ const toolNode: GraphNode<typeof MessagesState> = async (state) => {
     lastRetrieved = (raw as any)?.retrieved || undefined
     toolMsgs.push(
       new ToolMessage({
-        tool_call_id: toolCall.id,
+        tool_call_id: toolCall.id || toolCall.name,
         name: toolCall.name,
         content: typeof raw === 'string' ? raw : JSON.stringify(raw)
       })
