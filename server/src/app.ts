@@ -5,6 +5,9 @@ import uploadRouter from './routes/upload.js'
 import questionRouter from './routes/question.js'
 import quizRouter from './routes/quiz.js'
 import sseRouter from './routes/sse.js'
+import chatRouter from './routes/chat.js'
+import quizAutoRouter from './routes/quizAuto.js'
+import sessionsRouter from './routes/sessions.js'
 import mongoose from 'mongoose'
 import 'dotenv/config'
 
@@ -31,6 +34,9 @@ app.use(express.json())
 app.use('/upload', uploadRouter)
 app.use('/question', questionRouter)
 app.use('/quiz', quizRouter)
+app.use('/quiz', quizAutoRouter)
 app.use('/sse', sseRouter)
+app.use('/chat', chatRouter)
+app.use('/sessions', sessionsRouter)
 
 export default app
