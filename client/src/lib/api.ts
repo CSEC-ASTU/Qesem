@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+
+function buildUrl(pathname: string): string {
+  return new URL(pathname, API_BASE).toString();
+}
+
 const RawSessionSchema = z.object({
   _id: z.string().optional(),
   id: z.string().optional(),
@@ -70,6 +76,13 @@ async function safeFetch<T>(
     if (!res.ok) {
       return { ok: false, error: `HTTP ${res.status}` };
     }
+
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const text = await res.text();
+      return { ok: false, error: text?.slice(0, 120) || "Invalid response (expected JSON)" };
+    }
+
     const json = await res.json();
     const parsed = schema.safeParse(json);
     if (!parsed.success) {
@@ -83,7 +96,7 @@ async function safeFetch<T>(
 }
 
 export async function listSessions(): Promise<{ ok: boolean; sessions: Session[]; error?: string }> {
-  const result = await safeFetch("/sessions", { method: "GET" }, SessionsResponseSchema);
+  const result = await safeFetch(buildUrl("/sessions"), { method: "GET" }, SessionsResponseSchema);
   if (!result.ok) return { ok: false, sessions: [], error: result.error };
   const sessions = (result.data.sessions ?? []).map<Session>((s) => ({
     id: s.id ?? s._id ?? crypto.randomUUID(),
@@ -99,7 +112,7 @@ export async function sendChat(payload: ChatRequest): Promise<{ ok: boolean; res
     return { ok: false, error: "Invalid chat payload" };
   }
   const result = await safeFetch(
-    "/chat",
+    buildUrl("/chat"),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -120,7 +133,7 @@ export async function streamChat(
     throw new Error("Invalid chat payload");
   }
 
-  const res = await fetch("/chat?stream=true", {
+  const res = await fetch(buildUrl("/chat?stream=true"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(validated.data),
