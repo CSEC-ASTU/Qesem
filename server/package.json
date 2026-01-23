@@ -44,16 +44,19 @@
   },
   "dependencies": {
     "@langchain/core": "^1.1.16",
+    "@langchain/google-genai": "^2.1.12",
+    "@langchain/langgraph": "^1.1.1",
     "@langchain/mongodb": "^1.1.0",
     "@langchain/textsplitters": "^1.0.1",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "langchain": "^1.2.12",
     "mongoose": "^9.1.5",
     "multer": "^2.0.2",
     "pdf-parse": "^2.4.5",
     "voyage-ai-provider": "^3.0.0",
-    "zod": "^4.3.5"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
