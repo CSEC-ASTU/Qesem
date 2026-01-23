@@ -65,6 +65,9 @@ export async function* streamExplainAnswer(question: string, level: ExplainLevel
   for await (const token of stream) {
     yield { type: 'ANSWER_TOKEN', token }
   }
+
   yield { type: 'SOURCES', sources: prep.sources }
+  yield { type: 'SUGGESTIONS', suggestions: generateExplainSuggestions() }
+
 }
 
