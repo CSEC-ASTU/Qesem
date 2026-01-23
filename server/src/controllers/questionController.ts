@@ -32,6 +32,8 @@ export async function postQuestion(req: Request, res: Response) {
       guardFailed: explain.guardFailed
     })
   } catch (err) {
-    res.status(500).json({ ok: false, error: 'Failed to process question' })
+    console.error('postQuestion error:', err)
+    const message = err instanceof Error ? err.message : String(err)
+    res.status(500).json({ ok: false, error: message })
   }
 }

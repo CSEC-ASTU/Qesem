@@ -1,4 +1,4 @@
-const GOOGLE_API_ROOT = 'https://generativelanguage.googleapis.com/v1beta/models'
+const GOOGLE_API_ROOT = 'https://generativelanguage.googleapis.com/v1/models'
 
 function getApiKey() {
   const key = process.env.GOOGLE_API_KEY
