@@ -1,7 +1,7 @@
 import { Response } from 'express'
 
 export interface SseChannel {
-  send: (event: string, data: unknown) => void
+  writeEvent: (payload: Record<string, any>) => void
   close: () => void
 }
 
@@ -9,11 +9,11 @@ export function initSse(res: Response): SseChannel {
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders()
 
-  const send = (event: string, data: unknown) => {
-    res.write(`event: ${event}\n`)
-    res.write(`data: ${JSON.stringify(data)}\n\n`)
+  const writeEvent = (payload: Record<string, any>) => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`)
   }
 
   const close = () => {
@@ -24,12 +24,11 @@ export function initSse(res: Response): SseChannel {
     }
   }
 
-  // keep-alive
-  const interval = setInterval(() => send('ping', Date.now()), 20000)
+  const interval = setInterval(() => writeEvent({ type: 'PING', ts: Date.now() }), 20000)
   res.on('close', () => {
     clearInterval(interval)
     close()
   })
 
-  return { send, close }
+  return { writeEvent, close }
 }

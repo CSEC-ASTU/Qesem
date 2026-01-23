@@ -7,7 +7,9 @@ import chatRouter from './routes/chat.js'
 import quizAutoRouter from './routes/quizAuto.js'
 import sessionsRouter from './routes/sessions.js'
 import mongoose from 'mongoose'
-import 'dotenv/config'
+import dotenv from 'dotenv'
+
+dotenv.config()
 
 const MONGODB_URI = process.env.MONGODB_URI
 
@@ -15,11 +17,41 @@ if (!MONGODB_URI) {
 	throw new Error('MONGODB_URI environment variable is not set')
 }
 
-export const mongoReady = mongoose.connect(MONGODB_URI).then(() => {
-	console.log(`MongoDB connected`)
-}).catch((err) => {
-	console.error('Mongo connection error', err)
-	throw err
+// Track whether Mongo is reachable; useful for degraded-mode decisions
+export let isMongoConnected = false
+
+// Connect with resilient options and allow degraded startup on failure
+export const mongoReady = mongoose
+	.connect(MONGODB_URI, {
+		serverSelectionTimeoutMS: 8000,
+		socketTimeoutMS: 20000,
+		maxPoolSize: 10,
+		retryWrites: true,
+		family: 4,
+	})
+	.then(() => {
+		isMongoConnected = true
+		console.log('MongoDB connected')
+	})
+	.catch((err) => {
+		isMongoConnected = false
+		console.error('Mongo connection error', err)
+		// Do not throw here; allow server to start in degraded mode
+	})
+
+mongoose.connection.on('connected', () => {
+	isMongoConnected = true
+	console.log('MongoDB connection established')
+})
+
+mongoose.connection.on('disconnected', () => {
+	isMongoConnected = false
+	console.warn('MongoDB disconnected — running in degraded mode')
+})
+
+mongoose.connection.on('error', (err) => {
+	isMongoConnected = false
+	console.error('MongoDB error:', err?.message || err)
 })
 
 const app = express()

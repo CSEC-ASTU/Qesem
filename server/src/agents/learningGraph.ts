@@ -8,8 +8,7 @@ import {
   ReducedValue,
   START,
   END,
-  type GraphNode,
-  type ConditionalEdgeRouter
+  type GraphNode
 } from '@langchain/langgraph'
 import { SystemMessage, HumanMessage, AIMessage, ToolMessage } from '@langchain/core/messages'
 
@@ -19,13 +18,19 @@ import { buildQuizFromChunks } from '../services/quizService.js'
 import { getAnswer } from '../utils/quiz.js'
 import { evaluateAnswer } from '../utils/evaluate.js'
 import QuizAttempt from '../models/QuizAttempt.js'
+import { ensureChunks, ensureAttempt } from '../services/guardService.js'
+import { getCachedAnswer, setCachedAnswer, cacheKey, getRelevantSummaries } from '../services/contextService.js'
 
 const MessagesState = new StateSchema({
   messages: MessagesValue,
   llmCalls: new ReducedValue(z.number().default(0), { reducer: (x, y) => x + y }),
   mode: new ReducedValue(z.string().optional(), { reducer: (_x, y) => y ?? _x }),
   toolResult: new ReducedValue(z.any(), { reducer: (_x, y) => y }),
-  retrievedChunks: new ReducedValue(z.array(z.any()).optional(), { reducer: (_x, y) => y })
+  retrievedChunks: new ReducedValue(z.array(z.any()).optional(), { reducer: (_x, y) => y }),
+  selectedAction: new ReducedValue(z.string().optional(), { reducer: (_x, y) => y ?? _x }),
+  toolArgs: new ReducedValue(z.any(), { reducer: (_x, y) => y ?? _x }),
+  guardStop: new ReducedValue(z.boolean().optional(), { reducer: (_x, y) => y ?? _x }),
+  userId: new ReducedValue(z.string().optional(), { reducer: (_x, y) => y ?? _x })
 })
 
 const explainTool = tool(
@@ -155,12 +160,18 @@ const llmCall: GraphNode<typeof MessagesState> = async (state) => {
       new SystemMessage('You are a helpful assistant that chooses the right educational tool.'),
       ...baseMessages
     ])
-    return { messages: [response], llmCalls: 1, mode: 'llm' }
+    const call = response.tool_calls?.[0]
+    return {
+      messages: [response],
+      llmCalls: 1,
+      mode: 'llm',
+      selectedAction: call?.name,
+      toolArgs: call?.args
+    }
   } catch (err: any) {
     const msg = String(err?.message || '')
     const isQuota = err?.status === 429 || /quota|rate limit/i.test(msg)
     if (isQuota) {
-      // Keep messages as-is so fallback can inspect the human input
       return { messages: [], llmCalls: 0, mode: 'fallback' }
     }
     throw err
@@ -168,27 +179,28 @@ const llmCall: GraphNode<typeof MessagesState> = async (state) => {
 }
 
 const toolNode: GraphNode<typeof MessagesState> = async (state) => {
-  const lastMessage = state.messages.at(-1)
-  if (!lastMessage || !AIMessage.isInstance(lastMessage)) {
-    return { messages: [] }
-  }
+  const action = state.selectedAction
+  const args = state.toolArgs || {}
   const toolMsgs: ToolMessage[] = []
   let lastRaw: any = undefined
   let lastRetrieved: any[] | undefined = undefined
-  for (const toolCall of lastMessage.tool_calls ?? []) {
-    const t = toolsByName[toolCall.name]
-    if (!t) continue
-    const raw = await (t as any).invoke(toolCall.args ?? {})
-    lastRaw = raw
-    lastRetrieved = (raw as any)?.retrieved || undefined
-    toolMsgs.push(
-      new ToolMessage({
-        tool_call_id: toolCall.id || toolCall.name,
-        name: toolCall.name,
-        content: typeof raw === 'string' ? raw : JSON.stringify(raw)
-      })
-    )
+  if (!action) {
+    return { messages: [], mode: state.mode ?? 'fallback' }
   }
+  const t = toolsByName[action]
+  if (!t) {
+    return { messages: [], mode: 'fallback', toolResult: { ok: false, error: `Unknown tool ${action}` } }
+  }
+  const raw = await (t as any).invoke(args)
+  lastRaw = raw
+  lastRetrieved = (raw as any)?.retrieved || state.retrievedChunks || undefined
+  toolMsgs.push(
+    new ToolMessage({
+      tool_call_id: action,
+      name: action,
+      content: typeof raw === 'string' ? raw : JSON.stringify(raw)
+    })
+  )
   return { messages: toolMsgs, toolResult: lastRaw, retrievedChunks: lastRetrieved }
 }
 
@@ -210,30 +222,12 @@ function chooseToolByShape(input: any): { name: string; args: Record<string, any
   return null
 }
 
-const fallbackToolNode: GraphNode<typeof MessagesState> = async (state) => {
-  // Find initial human message content
-  const first = state.messages.find((m: any) => HumanMessage.isInstance(m))
-  const content: any = (first as any)?.text ?? (first as any)?.content
-  let parsed: any = content
-  try {
-    if (typeof content === 'string') parsed = JSON.parse(content)
-  } catch (_) {
-    parsed = content
-  }
-  const fb = chooseToolByShape(parsed)
-  if (!fb) {
-    return { messages: [], mode: 'fallback' }
-  }
-  const t = toolsByName[fb.name]
-  const raw = await (t as any).invoke(fb.args)
-  const retrieved = (raw as any)?.retrieved || undefined
-  return { messages: [], toolResult: raw, retrievedChunks: retrieved, mode: 'fallback' }
-}
+const guardNode: GraphNode<typeof MessagesState> = async (state) => {
+  // If toolResult already set (guard failure), stop.
+  if (state.guardStop) return state
 
-const shouldContinue = (state: any) => {
-  const lastMessage = state.messages.at(-1)
-  if (!lastMessage || !AIMessage.isInstance(lastMessage)) {
-    // If no AIMessage, attempt fallback based on shape
+  // Fallback tool choice if LLM didn't select
+  if (!state.selectedAction) {
     const first = state.messages.find((m: any) => HumanMessage.isInstance(m))
     const content: any = (first as any)?.text ?? (first as any)?.content
     let parsed: any = content
@@ -243,21 +237,57 @@ const shouldContinue = (state: any) => {
       parsed = content
     }
     const fb = chooseToolByShape(parsed)
-    return fb ? 'fallbackToolNode' : END
+    if (fb) {
+      state.selectedAction = fb.name
+      state.toolArgs = fb.args
+      state.mode = state.mode ?? 'fallback'
+    }
   }
-  if (lastMessage.tool_calls?.length) {
-    return 'toolNode'
+
+  // Cache check for explain
+  if (state.selectedAction === 'explainTool') {
+    const question = (state.toolArgs as any)?.question || ''
+    const cacheK = cacheKey(question, 'default')
+    const cached = getCachedAnswer(cacheK)
+    if (cached) {
+      return { ...state, toolResult: cached, guardStop: true, mode: 'cache' }
+    }
   }
-  return END
+
+  // Retrieval guard for explain/quizGeneration
+  if (state.selectedAction === 'explainTool') {
+    const question = (state.toolArgs as any)?.question || ''
+    const retrieved = await retrieveChunks(question, 10)
+    const guard = ensureChunks(retrieved, "I can't find this in your notes.")
+    if (guard) return { ...state, toolResult: guard, guardStop: true, mode: 'guard' }
+    return { ...state, retrievedChunks: retrieved }
+  }
+
+  if (state.selectedAction === 'quizGenerationTool') {
+    const topic = (state.toolArgs as any)?.topic || ''
+    const retrieved = await retrieveChunks(topic, 10)
+    const guard = ensureChunks(retrieved, 'No sufficient context to generate quiz.')
+    if (guard) return { ...state, toolResult: guard, guardStop: true, mode: 'guard' }
+    return { ...state, retrievedChunks: retrieved }
+  }
+
+  if (state.selectedAction === 'quizEvaluationTool') {
+    const attemptId = (state.toolArgs as any)?.attemptId
+    const attemptCheck = await ensureAttempt(attemptId)
+    if (!attemptCheck.ok) return { ...state, toolResult: attemptCheck, guardStop: true, mode: 'guard' }
+  }
+
+  return state
 }
 
 const workflow = new StateGraph(MessagesState)
   .addNode('llmCall', llmCall)
+  .addNode('guardNode', guardNode)
   .addNode('toolNode', toolNode)
-  .addNode('fallbackToolNode', fallbackToolNode)
   .addEdge(START, 'llmCall')
-  .addConditionalEdges('llmCall', shouldContinue, ['toolNode', 'fallbackToolNode', END])
-  .addEdge('toolNode', 'llmCall')
+  .addEdge('llmCall', 'guardNode')
+  .addConditionalEdges('guardNode', (s) => (s.guardStop ? END : 'toolNode'), ['toolNode', END])
+  .addEdge('toolNode', END)
 
 const app = workflow.compile()
 
@@ -269,10 +299,21 @@ export type LearningGraphState = {
   retrievedChunks?: any[]
 }
 
-export async function runLearningGraph(input: any): Promise<LearningGraphState> {
+type RunOptions = { userId?: string; sse?: (evt: any) => void }
+
+export async function runLearningGraph(input: any, opts: RunOptions = {}): Promise<LearningGraphState> {
   const initialMessage =
     typeof input === 'string'
       ? new HumanMessage(input)
       : new HumanMessage(JSON.stringify(input))
-  return app.invoke({ messages: [initialMessage] }) as any
+  const state = await app.invoke({ messages: [initialMessage], userId: opts.userId }) as any
+  if (opts.sse) {
+    opts.sse({ type: 'DONE' })
+  }
+  // cache explain answers
+  if ((state as any).selectedAction === 'explainTool' && state.toolResult?.answer) {
+    const question = (state as any)?.toolArgs?.question || ''
+    setCachedAnswer(cacheKey(question, 'default'), state.toolResult)
+  }
+  return state
 }

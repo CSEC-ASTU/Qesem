@@ -1,5 +1,6 @@
 import DocumentChunk from '../models/DocumentChunk.js'
 import { embedText } from './embedText.js'
+import mongoose from 'mongoose'
 
 export interface VectorSearchOptions {
   similarityThreshold?: number
@@ -31,6 +32,12 @@ export async function vectorSearchChunks(query: string, options: VectorSearchOpt
 
   const queryEmbedding = await embedText(query)
   if (!queryEmbedding.length) return []
+
+  // If Mongo is not connected, skip RAG and let caller decide how to respond
+  if (mongoose.connection.readyState !== 1) {
+    console.warn('vectorSearchChunks skipped: Mongo not connected (readyState=', mongoose.connection.readyState, ')')
+    return []
+  }
 
   const searchStage: Record<string, any> = {
     $vectorSearch: {
