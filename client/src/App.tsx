@@ -11,6 +11,9 @@ import {
   type ChatRequest,
 } from "./lib/api";
 import { useChatStore, type Message, type Role } from "./lib/store";
+import { uploadNotes } from "./lib/api";
+
+const BRAND = "#152737";
 
 function formatResult(result: unknown): string {
   if (!result) return "";
@@ -92,6 +95,8 @@ function App() {
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
   const [grading, setGrading] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const persistedCountRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -161,6 +166,37 @@ function App() {
       setError(result.error ?? "Failed to load session");
     }
     setLoadingSessionId(null);
+  }
+
+  async function handleUploadFile(file: File) {
+    if (!file) return;
+    setError(null);
+    setStatusNote("Uploading notes…");
+    setUploading(true);
+    const isSupported =
+      ["application/pdf", "text/plain"].includes(file.type) ||
+      /\.pdf$/i.test(file.name) ||
+      /\.txt$/i.test(file.name);
+    if (!isSupported) {
+      setError("Only PDF or TXT files are allowed");
+      setStatusNote(null);
+      setUploading(false);
+      return;
+    }
+    const result = await uploadNotes(file);
+    setUploading(false);
+    if (!result.ok) {
+      setError(result.error ?? "Failed to upload");
+      setStatusNote(null);
+      return;
+    }
+    setStatusNote(null);
+    addMessage({
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: `Uploaded successfully. Indexed ${result.saved ?? 0} chunks from ${file.name}.`,
+      createdAt: Date.now(),
+    });
   }
 
   async function handleSend(text: string, level: string) {
@@ -403,7 +439,8 @@ function App() {
         <div className="p-4 border-t border-slate-200">
           <button
             onClick={handleNewChat}
-            className="w-full rounded-lg bg-slate-900 text-white py-2.5 text-sm font-semibold hover:bg-slate-800 transition"
+            className="w-full rounded-lg text-white py-2.5 text-sm font-semibold transition"
+            style={{ backgroundColor: BRAND }}
           >
             + New chat
           </button>
@@ -411,26 +448,100 @@ function App() {
       </aside>
 
       <main className="flex-1 flex flex-col min-h-screen bg-slate-50">
-        <header className="flex items-center justify-between px-4 md:px-6 h-14 border-b border-slate-200 bg-white">
+        <header
+          className="flex items-center justify-between px-4 md:px-6 h-14 border-b"
+          style={{
+            backgroundColor: BRAND,
+            borderColor: "transparent",
+            color: "#fff",
+          }}
+        >
           <div className="flex items-center gap-3">
             <button
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-700"
+              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border"
+              style={{ borderColor: "rgba(255,255,255,0.4)", color: "#fff" }}
               onClick={() => setSidebarOpen((v) => !v)}
               aria-label="Toggle sidebar"
             >
               ☰
             </button>
-            <div>
-              <div className="text-sm font-semibold">{sessionTitle}</div>
-              <div className="text-xs text-slate-500">
-                Grounded answers, quizzes, grading
+            <div className="flex items-center gap-3">
+              <div className="inline-flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="inline-block h-6 w-6 rounded-full bg-white/20"
+                />
+                <span
+                  className="text-sm font-extrabold"
+                  style={{ color: "#fff" }}
+                >
+                  Qesem
+                </span>
+              </div>
+              <div>
+                <div
+                  className="text-sm font-semibold"
+                  style={{ color: "#fff" }}
+                >
+                  {sessionTitle}
+                </div>
+                <div className="text-xs" style={{ color: "#e5e7eb" }}>
+                  Grounded answers, quizzes, grading
+                </div>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3 text-xs font-semibold text-amber-600">
-            {statusNote && <span className="animate-pulse">{statusNote}</span>}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.txt,application/pdf,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleUploadFile(f);
+                // reset to allow re-select same file
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-1 disabled:opacity-50"
+              style={{
+                border: "1px solid rgba(255,255,255,0.5)",
+                color: "#fff",
+              }}
+              aria-label="Upload notes (PDF/TXT)"
+              title="Upload notes (PDF/TXT)"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="h-4 w-4"
+              >
+                <path d="M4 20h16M12 4v12m0 0l-4-4m4 4l4-4" />
+              </svg>
+              <span>Upload</span>
+            </button>
+            {statusNote && (
+              <span className="animate-pulse" style={{ color: "#fff" }}>
+                {statusNote}
+              </span>
+            )}
             {streaming && (
-              <span className="px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/30">
+              <span
+                className="px-2 py-1 rounded-full"
+                style={{
+                  backgroundColor: "rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  color: "#fff",
+                }}
+              >
                 Streaming…
               </span>
             )}
@@ -584,7 +695,8 @@ function App() {
                     type="button"
                     onClick={handleQuizSubmit}
                     disabled={grading}
-                    className="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-xl text-white px-4 py-2 text-sm font-semibold shadow disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: BRAND }}
                   >
                     {grading ? "Grading…" : "Submit answers"}
                   </button>

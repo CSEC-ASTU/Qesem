@@ -270,6 +270,34 @@ export async function evaluateQuizAttempt(
   return { ok: true, result: result.data };
 }
 
+// Upload API: send PDF/TXT file to backend
+export async function uploadNotes(file: File): Promise<{ ok: boolean; saved?: number; error?: string }> {
+  try {
+    const form = new FormData();
+    form.append("file", file);
+
+    const res = await fetch(buildUrl("/upload"), {
+      method: "POST",
+      body: form,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { ok: false, error: text || `HTTP ${res.status}` };
+    }
+
+    const json = await res.json().catch(() => ({}));
+    // Expected backend shape: { success: boolean, chunksSaved: number } or { error }
+    if (json && json.success) {
+      return { ok: true, saved: Number(json.chunksSaved || 0) };
+    }
+    return { ok: false, error: String(json?.error || "Upload failed") };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Network error";
+    return { ok: false, error: msg };
+  }
+}
+
 const ChatMessageSchema = z.object({
   role: z.enum(["user", "assistant", "system"]),
   content: z.string(),

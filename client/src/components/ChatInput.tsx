@@ -15,6 +15,8 @@ interface ChatInputProps {
 
 const levels: Level[] = ["ELI5", "ELI15", "EXAM"];
 
+const BRAND = "#152737";
+
 export function ChatInput({ disabled, placeholder, onSend }: ChatInputProps) {
   const [text, setText] = useState("");
   const [level, setLevel] = useState<Level>("ELI5");
@@ -72,7 +74,8 @@ export function ChatInput({ disabled, placeholder, onSend }: ChatInputProps) {
         type="button"
         onClick={submit}
         disabled={disabled || text.trim().length === 0}
-        className="h-11 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="h-11 rounded-xl px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ backgroundColor: BRAND }}
       >
         Send
       </button>
