@@ -1,5 +1,5 @@
 // import { z } from "zod";
-import { ChatRequestSchema as ChatEventSchema } from "./api";
+import { ChatEventSchema } from "./api";
 
 export type SseChatCallbacks = {
   onToken?: (token: string) => void;
@@ -43,9 +43,9 @@ export async function sseChat(
       if (!line.startsWith("data:")) continue;
       const payloadStr = line.replace(/^data:\s*/, "");
       try {
-        const parsedJson = JSON.parse(payloadStr);
-        const evtParsed = ChatEventSchema.safeParse(parsedJson);
-        if (!evtParsed.success) continue;
+const parsedJson = JSON.parse(payloadStr);
+const evtParsed = ChatEventSchema.safeParse(parsedJson);
+if (!evtParsed.success) continue;
         const evt = evtParsed.data;
         switch (evt.type) {
           case "AGENT_STEP":

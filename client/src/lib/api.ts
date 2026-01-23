@@ -56,13 +56,19 @@ export const ChatResponseSchema = z.object({
 
 export type ChatResponse = z.infer<typeof ChatResponseSchema>;
 
-const ChatEventSchema = z.object({
-  type: z.string(),
-  result: z.unknown().optional(),
-  retrieved: z.array(z.unknown()).optional(),
-  mode: z.string().optional(),
-  error: z.string().optional(),
-});
+export const ChatEventSchema = z
+  .object({
+    type: z.string(),
+    message: z.string().optional(),
+    token: z.string().optional(),
+    questions: z.array(z.unknown()).optional(),
+    sources: z.array(z.unknown()).optional(),
+    result: z.unknown().optional(),
+    retrieved: z.array(z.unknown()).optional(),
+    mode: z.string().optional(),
+    error: z.string().optional(),
+  })
+  .passthrough();
 
 export type ChatEvent = z.infer<typeof ChatEventSchema>;
 
