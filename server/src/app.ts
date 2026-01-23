@@ -4,6 +4,7 @@ import cors from 'cors'
 import uploadRouter from './routes/upload.js'
 import questionRouter from './routes/question.js'
 import quizRouter from './routes/quiz.js'
+import sseRouter from './routes/sse.js'
 import mongoose from 'mongoose'
 import 'dotenv/config'
 
@@ -30,5 +31,6 @@ app.use(express.json())
 app.use('/upload', uploadRouter)
 app.use('/question', questionRouter)
 app.use('/quiz', quizRouter)
+app.use('/sse', sseRouter)
 
 export default app

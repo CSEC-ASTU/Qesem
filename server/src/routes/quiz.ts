@@ -1,10 +1,10 @@
 import { Router } from 'express'
+import { postQuiz, postQuizEvaluate } from '../controllers/quizController.js'
 
 const router = Router()
 
-// Placeholder quiz route
-router.get('/', async (_req, res) => {
-  res.json({ ok: true, route: 'quiz' })
-})
+// Generate quiz questions handled by controller
+router.post('/', postQuiz)
+router.post('/evaluate', postQuizEvaluate)
 
 export default router

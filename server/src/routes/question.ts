@@ -1,10 +1,9 @@
 import { Router } from 'express'
+import { postQuestion } from '../controllers/questionController.js'
 
 const router = Router()
 
-// Placeholder question route
-router.post('/', async (req, res) => {
-  res.json({ ok: true, route: 'question' })
-})
+// Question route handled by controller
+router.post('/', postQuestion)
 
 export default router

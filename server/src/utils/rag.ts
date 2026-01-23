@@ -9,10 +9,18 @@ export interface VectorSearchOptions {
   filter?: Record<string, unknown>
 }
 
+export interface RetrievedChunk {
+  content: string
+  documentName: string
+  pageNumber: number
+  chunkIndex: number
+  score: number
+}
+
 /**
  * Retrieve top chunks using MongoDB vector search (cosine similarity via $vectorSearch).
  */
-export async function vectorSearchChunks(query: string, options: VectorSearchOptions = {}) {
+export async function vectorSearchChunks(query: string, options: VectorSearchOptions = {}): Promise<RetrievedChunk[]> {
   const threshold = options.similarityThreshold ?? 0.3
   const topK = options.topK ?? 3
   const numCandidates = options.numCandidates ?? Math.max(topK * 20, 100)
