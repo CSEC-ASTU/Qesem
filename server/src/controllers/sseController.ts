@@ -19,7 +19,10 @@ export async function getSSE(req: Request, res: Response) {
         writeEvent({ type: 'DONE', error: 'No sufficient context to generate quiz.' })
         return
       }
-      const questions = buildQuizFromChunks(retrieved.map((c) => ({ content: c.content })), desiredQuizCount)
+      const questions = await buildQuizFromChunks(
+        retrieved.map((c) => ({ content: c.content })),
+        desiredQuizCount
+      )
       writeEvent({ type: 'QUIZ', questions })
       writeEvent({ type: 'DONE' })
       return

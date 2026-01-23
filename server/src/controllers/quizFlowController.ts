@@ -17,7 +17,10 @@ export async function postQuizAuto(req: Request, res: Response) {
     const guard = ensureChunks(retrieved, 'No sufficient context to generate quiz.')
     if (guard) return res.status(400).json(guard)
 
-    const questions = buildQuizFromChunks(retrieved.map((c) => ({ content: c.content })), questionCount || 5)
+    const questions = await buildQuizFromChunks(
+      retrieved.map((c) => ({ content: c.content })),
+      questionCount || 5
+    )
     const storedQuestions = questions.map((q) => {
       const ans = getAnswer(q.id)
       return {

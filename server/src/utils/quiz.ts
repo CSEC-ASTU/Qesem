@@ -134,3 +134,9 @@ export function getAnswer(questionId: string): AnswerRecord | undefined {
 export function clearAnswers() {
   answersStore.clear()
 }
+
+export function storeAnswer(questionId: string, type: QuestionType, answer: string) {
+  answersStore.set(questionId, { type, answer })
+}
+
+export { uniqueId }
