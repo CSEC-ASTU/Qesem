@@ -217,4 +217,32 @@ export async function getSessionById(
   };
 }
 
+const UploadResponseSchema = z.object({
+  ok: z.boolean(),
+  fileUrl: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export async function uploadFile(
+  file: File
+): Promise<{ ok: boolean; fileUrl?: string; error?: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const result = await safeFetch(
+    buildUrl("/upload"),
+    {
+      method: "POST",
+      body: formData,
+    },
+    UploadResponseSchema
+  );
+
+  if (!result.ok) return { ok: false, error: result.error };
+
+  return {
+    ok: true,
+    fileUrl: result.data.fileUrl,
+  };
+}
 
