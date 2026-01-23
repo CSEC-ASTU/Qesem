@@ -149,6 +149,15 @@ function App() {
     return session?.title ?? "New chat";
   }, [sessions, activeSessionId]);
 
+  const lastUserPrompt = useMemo(() => {
+    const u = messages.filter(
+      (m) => m.role === "user" && m.content.trim().length > 0,
+    );
+    return u.length
+      ? u[u.length - 1].content
+      : "Ask anything about your notes, or request a quiz";
+  }, [messages]);
+
   async function handleSelectSession(id: string) {
     setLoadingSessionId(id);
     setActiveSession(id);
@@ -665,74 +674,68 @@ function App() {
       </aside>
 
       <main className="ml-0 md:ml-72 flex flex-col h-screen bg-slate-50 overflow-hidden">
-        <header className="flex items-center justify-between px-4 md:px-6 h-14 bg-[#152737] text-white">
-          <div className="flex items-center gap-3">
-            <button
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/40 text-white"
-              onClick={() => setSidebarOpen((v) => !v)}
-              aria-label="Toggle sidebar"
-            >
-              ☰
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="inline-flex items-center gap-2">
+        <header className="sticky top-0 z-20 px-4 md:px-6 py-3 border-b shadow-sm bg-slate-50 dark:bg-slate-900">
+          <div className="flex items-center justify-between">
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center gap-2">
                 <span
                   aria-hidden
-                  className="inline-block h-6 w-6 rounded-full bg-white/20"
+                  className="inline-block h-6 w-6 rounded-full bg-slate-200 dark:bg-slate-700"
                 />
-                <span className="text-sm font-extrabold text-white">Qesem</span>
+                <span className="text-lg md:text-xl font-semibold text-slate-900 dark:text-slate-100">
+                  Qesem
+                </span>
               </div>
-              <div>
-                <div className="text-sm font-semibold text-white/80">
-                  {sessionTitle}
-                </div>
-                <div className="text-xs text-white/70">
-                  Grounded answers, quizzes, grading
-                </div>
+              <div className="text-sm md:text-base text-gray-700 dark:text-gray-300 truncate">
+                {lastUserPrompt}
+              </div>
+              <div className="text-xs md:text-sm text-gray-500">
+                Grounded answers, quizzes, grading
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3 text-xs font-semibold text-amber-600">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.txt,application/pdf,text/plain"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleUploadFile(f);
-                // reset to allow re-select same file
-                if (fileInputRef.current) fileInputRef.current.value = "";
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-1 border border-white/50 text-white disabled:opacity-50"
-              aria-label="Upload notes (PDF/TXT)"
-              title="Upload notes (PDF/TXT)"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="h-4 w-4"
+            <div className="flex items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.txt,application/pdf,text/plain"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleUploadFile(f);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                aria-label="Upload notes (PDF/TXT)"
+                title="Upload notes (PDF/TXT)"
               >
-                <path d="M4 20h16M12 4v12m0 0l-4-4m4 4l4-4" />
-              </svg>
-              <span>Upload</span>
-            </button>
-            {statusNote && (
-              <span className="animate-pulse text-white">{statusNote}</span>
-            )}
-            {streaming && (
-              <span className="px-2 py-1 rounded-full bg-white/10 border border-white/30 text-white">
-                Streaming…
-              </span>
-            )}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="h-4 w-4"
+                >
+                  <path d="M4 20h16M12 4v12m0 0l-4-4m4 4l4-4" />
+                </svg>
+                <span>Upload</span>
+              </button>
+              {statusNote && (
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                  {statusNote}
+                </span>
+              )}
+              {streaming && (
+                <span className="text-xs rounded-full px-2 py-1 bg-slate-100 border border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200">
+                  Streaming…
+                </span>
+              )}
+            </div>
           </div>
         </header>
 
