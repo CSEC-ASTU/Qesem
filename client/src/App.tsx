@@ -409,16 +409,16 @@ function App() {
                 : "bg-[#212121] text-white border-white/20"
             }`}
           >
-            <div className="text-xs font-semibold mb-1 uppercase tracking-wide text-white/60">
+            <div className="text-[14px] font-semibold mb-1 uppercase tracking-wide text-white/60">
               {m.role === "user" ? "You" : "Assistant"}
             </div>
-            <div className="whitespace-pre-wrap text-base leading-relaxed text-white">
+            <div className="whitespace-pre-wrap text-[18px] leading-7 text-white">
               {m.streaming ? "…" : m.content}
             </div>
           </div>
         ))}
         {filteredMessages.length === 0 && (
-          <div className="text-sm text-white/80 rounded-xl border border-white/30 bg-[#303030] p-4 shadow-sm">
+          <div className="text-[16px] text-white/80 rounded-xl border border-white/30 bg-[#303030] p-4 shadow-sm">
             Ask anything about your notes, request a quiz, or paste quiz answers
             to grade them.
           </div>
@@ -435,10 +435,10 @@ function App() {
         <div className="rounded-2xl border border-white bg-[#212121] shadow-lg p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-semibold text-white">
+              <div className="text-[18px] font-semibold text-white">
                 Quiz ready ({activeQuiz.questions.length} questions)
               </div>
-              <div className="text-xs text-white/70">
+              <div className="text-[16px] text-white/70">
                 Generated from your notes. Fill answers then grade.
               </div>
             </div>
@@ -457,8 +457,8 @@ function App() {
                 key={q.questionId}
                 className="rounded-xl border border-white/30 bg-[#303030] p-4 space-y-2"
               >
-                <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                  <span className="text-xs text-white/60">Q{idx + 1}</span>
+                <div className="flex items-center gap-2 text-[17px] font-semibold text-white">
+                  <span className="text-[14px] text-white/60">Q{idx + 1}</span>
                   <span>{q.prompt}</span>
                 </div>
                 {q.type === "mcq" &&
@@ -491,7 +491,7 @@ function App() {
                   </div>
                 ) : (
                   <textarea
-                    className="w-full rounded-lg border border-white/30 bg-[#212121] px-3 py-2 text-sm text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
+                    className="w-full rounded-lg border border-white/30 bg-[#212121] px-3 py-2 text-[17px] text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
                     rows={2}
                     placeholder="Type your short answer"
                     value={quizResponses[q.questionId] || ""}
@@ -506,7 +506,7 @@ function App() {
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <div className="text-xs text-white/70">
+            <div className="text-[16px] text-white/70">
               Answer everything, then grade.
             </div>
             <button
@@ -532,10 +532,10 @@ function App() {
         <div className="rounded-2xl border border-white bg-[#212121] shadow-lg p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-semibold text-white">
+              <div className="text-[18px] font-semibold text-white">
                 Quiz results
               </div>
-              <div className="text-xs text-white/70">
+              <div className="text-[16px] text-white/70">
                 Grounded answers from your notes.
               </div>
             </div>
@@ -549,20 +549,22 @@ function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="text-3xl font-extrabold text-white">
+            <div className="text-[28px] font-extrabold text-white">
               {Math.round((quizResult.score ?? 0) * 100) / 100}%
             </div>
-            <div className="text-sm text-white/70">Final score</div>
+            <div className="text-[16px] text-white/70">Final score</div>
           </div>
 
           {weakAreas.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs font-semibold text-white">Weak areas</div>
+              <div className="text-[16px] font-semibold text-white">
+                Weak areas
+              </div>
               <div className="flex flex-wrap gap-2">
                 {weakAreas.map((w) => (
                   <span
                     key={w}
-                    className="text-xs rounded-full px-3 py-1 border border-white/30 bg-[#303030] text-white"
+                    className="text-[14px] rounded-full px-3 py-1 border border-white/30 bg-[#303030] text-white"
                   >
                     {truncate(w)}
                   </span>
@@ -577,14 +579,14 @@ function App() {
                 key={f.questionId}
                 className="rounded-xl border border-white/30 bg-[#303030] p-3 space-y-1"
               >
-                <div className="flex items-center justify-between text-sm font-semibold">
+                <div className="flex items-center justify-between text-[17px] font-semibold">
                   <span className="text-white">Question</span>
-                  <span className="text-xs rounded-full px-2 py-1 border border-white/30 bg-[#212121] text-white">
+                  <span className="text-[14px] rounded-full px-2 py-1 border border-white/30 bg-[#212121] text-white">
                     {f.result ?? "Pending"}
                   </span>
                 </div>
                 {f.explanation && (
-                  <div className="text-xs text-white/80 leading-relaxed">
+                  <div className="text-[16px] text-white/80 leading-relaxed">
                     {f.explanation}
                   </div>
                 )}
@@ -657,14 +659,14 @@ function App() {
                   aria-hidden
                   className="inline-block h-7 w-7 rounded-full bg-[#303030] ring-2 ring-white/30"
                 />
-                <span className="text-lg md:text-xl font-semibold text-white tracking-tight">
+                <span className="text-[24px] md:text-[26px] font-semibold text-white tracking-tight">
                   Qesem
                 </span>
               </div>
-              <div className="text-sm md:text-base text-white/80 truncate">
+              <div className="text-[18px] md:text-[19px] leading-7 text-white/80 truncate">
                 {lastUserPrompt}
               </div>
-              <div className="text-xs md:text-sm text-white/60">
+              <div className="text-[16px] text-white/60">
                 Grounded answers, quizzes, grading
               </div>
             </div>
