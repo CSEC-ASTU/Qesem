@@ -1,3 +1,4 @@
+import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 import { embedTexts, RateLimitError } from '../utils/embedText.js'
 import { insertChunks } from '../repositories/chunkRepository.js'
 import { DocumentChunkAttrs } from '../models/DocumentChunk.js'
@@ -12,24 +13,34 @@ interface ChunkOptions {
   overlap?: number
 }
 
-export function chunkPagesToDocuments(pages: PageText[], options: ChunkOptions = {}) {
-  const chunkSize = options.chunkSize ?? 100
-  const overlap = options.overlap ?? 20
-  const step = Math.max(1, chunkSize - overlap)
+export async function chunkPagesToDocuments(
+  pages: PageText[],
+  options: ChunkOptions = {}
+) {
+  const chunkSize = options.chunkSize ?? 800
+  const overlap = options.overlap ?? 120
+  const splitter = new RecursiveCharacterTextSplitter({
+    chunkSize,
+    chunkOverlap: overlap,
+    separators: ['\n\n', '\n', ' ', '']
+  })
+
   const chunks: Array<Omit<DocumentChunkAttrs, 'embedding'>> = []
 
-  pages.forEach((page) => {
-    const words = page.text.split(/\s+/).filter(Boolean)
-    for (let i = 0; i < words.length; i += step) {
-      const slice = words.slice(i, i + chunkSize)
+  for (const page of pages) {
+    if (!page.text?.trim()) continue
+    const pieces = await splitter.splitText(page.text)
+    pieces.forEach((content) => {
+      const cleaned = content.trim()
+      if (!cleaned) return
       chunks.push({
         documentName: '', // filled later
         pageNumber: page.pageNumber,
         chunkIndex: chunks.length,
-        content: slice.join(' ')
+        content: cleaned
       })
-    }
-  })
+    })
+  }
 
   return chunks
 }
@@ -39,7 +50,7 @@ export async function embedAndStoreChunks(
   pages: PageText[],
   options: ChunkOptions = {}
 ) {
-  const chunked = chunkPagesToDocuments(pages, options)
+  const chunked = await chunkPagesToDocuments(pages, options)
   const batchSize = Number(process.env.VOYAGE_EMBED_BATCH_SIZE ?? '16')
   const batchIntervalMs = Number(process.env.VOYAGE_EMBED_BATCH_INTERVAL_MS ?? '20000')
 

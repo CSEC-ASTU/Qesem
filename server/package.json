@@ -38,10 +38,13 @@
   "main": "server.ts",
   "scripts": {
     "dev": "node --loader ts-node/esm src/server.ts",
+    "create": "node --loader ts-node/esm scripts/createVectorIndex.ts",
     "start": "node dist/server.js",
     "build": "tsc"
   },
   "dependencies": {
+    "@langchain/core": "^1.1.16",
+    "@langchain/textsplitters": "^1.0.1",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
