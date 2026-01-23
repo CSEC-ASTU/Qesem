@@ -4,4 +4,8 @@ export interface AgentSuggestion {
     action: string
 }
 
+export interface AgentResponse {
+    message: string
+    suggestions?: AgentSuggestion[]
+}
 
