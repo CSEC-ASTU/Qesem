@@ -6,11 +6,15 @@ import {
   type ChatRequest,
 } from "./lib/api";
 import { useChatStore } from "./lib/store";
+import { useRef } from "react";
 
 function formatResult(result: unknown): string {
   if (!result) return "";
   if (typeof result === "string") return result;
-  if (typeof result === "object" && "answer" in (result as Record<string, unknown>)) {
+  if (
+    typeof result === "object" &&
+    "answer" in (result as Record<string, unknown>)
+  ) {
     const val = (result as { answer?: unknown }).answer;
     if (typeof val === "string") return val;
   }
@@ -31,6 +35,7 @@ function App() {
     setActiveSession,
     addMessage,
     updateMessage,
+    appendMessage,
     setStreaming,
     resetMessages,
   } = useChatStore();
@@ -38,6 +43,8 @@ function App() {
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -49,6 +56,13 @@ function App() {
       }
     })();
   }, [setSessions]);
+
+  useEffect(() => {
+    // Auto-scroll to bottom on new messages
+    if (scrollAnchorRef.current) {
+      scrollAnchorRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
 
   const sessionTitle = useMemo(() => {
     const session = sessions.find((s) => s.id === activeSessionId);
@@ -63,8 +77,19 @@ function App() {
     const userId = crypto.randomUUID();
     const assistantId = crypto.randomUUID();
 
-    addMessage({ id: userId, role: "user", content: trimmed, createdAt: Date.now() });
-    addMessage({ id: assistantId, role: "assistant", content: "", createdAt: Date.now(), streaming: true });
+    addMessage({
+      id: userId,
+      role: "user",
+      content: trimmed,
+      createdAt: Date.now(),
+    });
+    addMessage({
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      createdAt: Date.now(),
+      streaming: true,
+    });
     setStreaming(true);
     setInput("");
 
@@ -79,7 +104,7 @@ function App() {
         }
         if (evt.result) {
           const content = formatResult(evt.result);
-          updateMessage(assistantId, { content, streaming: false });
+          appendMessage(assistantId, content);
         }
       });
     } catch (err) {
@@ -88,6 +113,7 @@ function App() {
       updateMessage(assistantId, { content: msg, streaming: false });
     } finally {
       setStreaming(false);
+      updateMessage(assistantId, { streaming: false });
     }
   }
 
@@ -100,7 +126,7 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex">
       <aside
-        className={`$${""} ${
+        className={`${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 fixed md:static inset-y-0 left-0 z-20 w-64 bg-white border-r border-slate-200 shadow-sm md:shadow-none transition-transform duration-200 ease-out flex flex-col`}
       >
@@ -153,13 +179,22 @@ function App() {
             </button>
             <div>
               <div className="text-sm font-semibold">{sessionTitle}</div>
-              <div className="text-xs text-slate-500">Grounded answers, quizzes, grading</div>
+              <div className="text-xs text-slate-500">
+                Grounded answers, quizzes, grading
+              </div>
             </div>
           </div>
-          {streaming && <div className="text-xs font-semibold text-amber-600">Streaming…</div>}
+          {streaming && (
+            <div className="text-xs font-semibold text-amber-600">
+              Streaming…
+            </div>
+          )}
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-3">
+        <div
+          className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-3"
+          ref={messagesEndRef}
+        >
           {messages.map((m) => (
             <div
               key={m.id}
@@ -178,9 +213,12 @@ function App() {
             </div>
           ))}
           {messages.length === 0 && (
-            <div className="text-sm text-slate-500">Ask anything about your notes to get started.</div>
+            <div className="text-sm text-slate-500">
+              Ask anything about your notes to get started.
+            </div>
           )}
           {error && <div className="text-sm text-red-600">{error}</div>}
+          <div ref={scrollAnchorRef} />
         </div>
 
         <div className="border-t border-slate-200 bg-white px-4 md:px-6 py-3">
