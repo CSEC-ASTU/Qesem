@@ -34,12 +34,13 @@ export async function getExplainAnswer(question: string, level: ExplainLevel) {
     return {
       answer: prep.guardMessage || "I can’t find this in your notes.",
       sources: prep.sources,
+      retrieved: prep.retrieved,
       guardFailed: true
     }
   }
 
   const answer = await completeChat(prep.prompt)
-  return { answer, sources: prep.sources, guardFailed: false }
+  return { answer, sources: prep.sources, retrieved: prep.retrieved, guardFailed: false }
 }
 
 export async function* streamExplainAnswer(question: string, level: ExplainLevel) {

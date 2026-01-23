@@ -32,18 +32,23 @@ export async function vectorSearchChunks(query: string, options: VectorSearchOpt
   const queryEmbedding = await embedText(query)
   if (!queryEmbedding.length) return []
 
+  const searchStage: Record<string, any> = {
+    $vectorSearch: {
+      index,
+      path: 'embedding',
+      queryVector: queryEmbedding,
+      similarity: 'cosine',
+      numCandidates,
+      limit: topK
+    }
+  }
+
+  if (filter && typeof filter === 'object' && Object.keys(filter).length > 0) {
+    searchStage.$vectorSearch.filter = filter
+  }
+
   const pipeline = [
-    {
-      $vectorSearch: {
-        index,
-        path: 'embedding',
-        queryVector: queryEmbedding,
-        similarity: 'cosine',
-        numCandidates,
-        limit: topK,
-        filter
-      }
-    },
+    searchStage,
     {
       $project: {
         content: 1,
