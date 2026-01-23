@@ -133,18 +133,50 @@ const tools = [explainTool, quizGenerationTool, quizEvaluationTool]
 const model = new ChatGoogleGenerativeAI({
   model: process.env.GEMINI_MODEL || 'gemini-2.5-pro',
   apiKey: process.env.GOOGLE_API_KEY,
-  temperature: 0.2
+  temperature: 0.2,
+  // Fail fast on quota errors
+  maxRetries: 0
 }).bindTools(tools)
+
+function chooseToolByShape(input: any): { name: string; args: Record<string, any> } | null {
+  if (typeof input === 'string' && input.trim()) {
+    return { name: 'explainTool', args: { question: input, level: 'ELI5' } }
+  }
+  if (input && typeof input === 'object') {
+    if (typeof input.question === 'string') {
+      return { name: 'explainTool', args: { question: input.question, level: input.level || 'ELI5' } }
+    }
+    if (typeof input.topic === 'string') {
+      return { name: 'quizGenerationTool', args: { topic: input.topic, questionCount: input.questionCount } }
+    }
+    if (typeof input.attemptId === 'string' && Array.isArray(input.responses)) {
+      return { name: 'quizEvaluationTool', args: { attemptId: input.attemptId, responses: input.responses } }
+    }
+  }
+  return null
+}
 
 async function agentNode(state: LearningStateType): Promise<Partial<LearningStateType>> {
   const userInput = state.userInput
   const prompt = typeof userInput === 'string' ? userInput : JSON.stringify(userInput)
-  const res = await model.invoke([{ role: 'user', content: prompt }])
-  const call = res.tool_calls?.[0]
-  if (!call) {
-    throw new Error('Agent did not select a tool')
+  try {
+    const res = await model.invoke([{ role: 'user', content: prompt }])
+    const call = res.tool_calls?.[0]
+    if (call) {
+      return { selectedAction: call.name, toolArgs: call.args }
+    }
+  } catch (err: any) {
+    const msg = String(err?.message || '')
+    const isQuota = err?.status === 429 || /quota|rate limit/i.test(msg)
+    if (!isQuota) {
+      throw err
+    }
   }
-  return { selectedAction: call.name, toolArgs: call.args }
+  const fallback = chooseToolByShape(userInput)
+  if (!fallback) {
+    throw new Error('Agent could not select a tool (LLM unavailable and no fallback match)')
+  }
+  return { selectedAction: fallback.name, toolArgs: fallback.args }
 }
 
 async function toolNode(state: LearningStateType): Promise<Partial<LearningStateType>> {
