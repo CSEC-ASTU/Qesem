@@ -4,18 +4,18 @@ import { buildQuizFromChunks } from '../services/quizService.js'
 import { getAnswer } from '../utils/quiz.js'
 import { evaluateAnswer } from '../utils/evaluate.js'
 import QuizAttempt from '../models/QuizAttempt.js'
+import { ensureChunks } from '../services/guardService.js'
 
 export async function postQuizAuto(req: Request, res: Response) {
   try {
-    const { topic, difficulty, questionCount, questionType } = req.body || {}
+    const { topic, difficulty, questionCount, questionType, userId, sessionId } = req.body || {}
     if (!topic || typeof topic !== 'string') {
       return res.status(400).json({ ok: false, error: 'topic is required' })
     }
 
     const retrieved = await retrieveChunks(topic, 10)
-    if (!retrieved.length) {
-      return res.status(400).json({ ok: false, error: 'No content found for topic' })
-    }
+    const guard = ensureChunks(retrieved, 'No sufficient context to generate quiz.')
+    if (guard) return res.status(400).json(guard)
 
     const questions = buildQuizFromChunks(retrieved.map((c) => ({ content: c.content })), questionCount || 5)
     const storedQuestions = questions.map((q) => {
@@ -34,10 +34,11 @@ export async function postQuizAuto(req: Request, res: Response) {
       difficulty,
       questionCount: questionCount || questions.length,
       questionType,
-      questions: storedQuestions
-    })
+      questions: storedQuestions,
+      userId,
+      sessionId
+    } as any)
 
-    // return questions without answers
     const responseQuestions = storedQuestions.map((q) => ({
       questionId: q.questionId,
       prompt: q.prompt,
@@ -45,7 +46,7 @@ export async function postQuizAuto(req: Request, res: Response) {
       options: q.options
     }))
 
-    return res.json({ ok: true, attemptId: attempt._id, questions: responseQuestions })
+    return res.json({ ok: true, attemptId: (attempt as any)._id, questions: responseQuestions, summary: { topic, questionCount: responseQuestions.length } })
   } catch (err) {
     console.error('postQuizAuto error:', err)
     const message = err instanceof Error ? err.message : String(err)
@@ -91,6 +92,7 @@ export async function postQuizAutoEvaluate(req: Request, res: Response) {
 
     return res.json({
       ok: true,
+      attemptId: attempt._id,
       score: attempt.score,
       weakAreas,
       feedback,
