@@ -7,6 +7,7 @@ import {
 } from "./lib/api";
 import { useChatStore } from "./lib/store";
 import { useRef } from "react";
+import { ChatInput } from "./components/ChatInput";
 
 function formatResult(result: unknown): string {
   if (!result) return "";
@@ -40,7 +41,6 @@ function App() {
     resetMessages,
   } = useChatStore();
 
-  const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -69,8 +69,8 @@ function App() {
     return session?.title ?? "New chat";
   }, [sessions, activeSessionId]);
 
-  async function handleSend() {
-    const trimmed = input.trim();
+  async function handleSend(text: string, level: string) {
+    const trimmed = text.trim();
     if (!trimmed || streaming) return;
     setError(null);
 
@@ -91,9 +91,7 @@ function App() {
       streaming: true,
     });
     setStreaming(true);
-    setInput("");
-
-    const payload: ChatRequest = { question: trimmed };
+    const payload: ChatRequest = { question: trimmed, level };
 
     try {
       await streamChat(payload, (evt: ChatEvent) => {
@@ -120,7 +118,6 @@ function App() {
   function handleNewChat() {
     resetMessages();
     setActiveSession(undefined);
-    setInput("");
   }
 
   return (
@@ -222,28 +219,12 @@ function App() {
         </div>
 
         <div className="border-t border-slate-200 bg-white px-4 md:px-6 py-3">
-          <div className="flex gap-3 max-w-4xl">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
-              placeholder="Ask a question or request a quiz..."
-              aria-label="Chat input"
+          <div className="max-w-4xl">
+            <ChatInput
               disabled={streaming}
+              onSend={({ text, level }) => handleSend(text, level)}
+              placeholder="Ask a question or request a quiz..."
             />
-            <button
-              onClick={handleSend}
-              disabled={streaming || input.trim().length === 0}
-              className="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Send
-            </button>
           </div>
         </div>
       </main>
