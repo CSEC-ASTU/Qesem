@@ -19,7 +19,7 @@ export interface SessionItem {
 export interface QuizQuestion {
   questionId: string;
   prompt: string;
-  type?: string;
+  type?: "short" | "mcq" | string;
   options?: string[];
 }
 
@@ -27,6 +27,7 @@ export interface QuizResult {
   attemptId?: string;
   score?: number;
   feedback?: Array<{ questionId: string; result: string; explanation?: string }>;
+  weakAreas?: string[];
 }
 
 interface ChatState {
@@ -35,15 +36,17 @@ interface ChatState {
   activeSessionId?: string;
   streaming: boolean;
   quizQuestions: QuizQuestion[];
+  quizAttemptId?: string;
   quizResult?: QuizResult;
   setSessions: (sessions: SessionItem[]) => void;
   setActiveSession: (id: string | undefined) => void;
+  setMessages: (messages: Message[]) => void;
   addMessage: (msg: Message) => void;
   updateMessage: (id: string, partial: Partial<Message>) => void;
   appendMessage: (id: string, text: string) => void;
   resetMessages: () => void;
   setStreaming: (value: boolean) => void;
-  setQuizState: (questions: QuizQuestion[], result?: QuizResult) => void;
+  setQuizState: (payload: { questions: QuizQuestion[]; result?: QuizResult; attemptId?: string }) => void;
   clearQuiz: () => void;
 }
 
@@ -53,9 +56,11 @@ export const useChatStore = create<ChatState>((set) => ({
   activeSessionId: undefined,
   streaming: false,
   quizQuestions: [],
+  quizAttemptId: undefined,
   quizResult: undefined,
   setSessions: (sessions) => set(() => ({ sessions })),
   setActiveSession: (id) => set(() => ({ activeSessionId: id })),
+  setMessages: (messages) => set(() => ({ messages })),
   addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
   updateMessage: (id, partial) =>
     set((state) => ({
@@ -69,6 +74,7 @@ export const useChatStore = create<ChatState>((set) => ({
     })),
   resetMessages: () => set(() => ({ messages: [] })),
   setStreaming: (value) => set(() => ({ streaming: value })),
-  setQuizState: (questions, result) => set(() => ({ quizQuestions: questions, quizResult: result })),
-  clearQuiz: () => set(() => ({ quizQuestions: [], quizResult: undefined })),
+  setQuizState: ({ questions, result, attemptId }) =>
+    set(() => ({ quizQuestions: questions, quizResult: result, quizAttemptId: attemptId })),
+  clearQuiz: () => set(() => ({ quizQuestions: [], quizResult: undefined, quizAttemptId: undefined })),
 }));
