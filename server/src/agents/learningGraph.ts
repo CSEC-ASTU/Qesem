@@ -54,7 +54,10 @@ const quizGenerationTool = tool(
     if (!retrieved.length) {
       return { ok: false, error: 'No context found for topic' }
     }
-    const questions = buildQuizFromChunks(retrieved.map((c) => ({ content: c.content })), questionCount || 5)
+    const questions = await buildQuizFromChunks(
+      retrieved.map((c) => ({ content: c.content })),
+      questionCount || 5
+    )
     const storedQuestions = questions.map((q) => {
       const ans = getAnswer(q.id)
       return {

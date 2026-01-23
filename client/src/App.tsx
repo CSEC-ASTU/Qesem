@@ -74,18 +74,24 @@ function App() {
     sessions,
     activeSessionId,
     streaming,
-    quizQuestions,
+    uiMode,
+    activeQuiz,
+    quizResponses,
     quizResult,
-    quizAttemptId,
     setSessions,
     setActiveSession,
     setMessages,
     addMessage,
+    removeMessage,
     updateMessage,
     appendMessage,
     setStreaming,
     resetMessages,
-    setQuizState,
+    setUiMode,
+    setActiveQuiz,
+    setQuizResult,
+    setQuizResponses,
+    updateQuizResponse,
     clearQuiz,
   } = useChatStore();
 
@@ -94,7 +100,6 @@ function App() {
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
   const [grading, setGrading] = useState(false);
-  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const persistedCountRef = useRef(0);
@@ -127,14 +132,17 @@ function App() {
   }, [messages]);
 
   useEffect(() => {
-    setQuizAnswers((prev) => {
+    if (activeQuiz?.questions) {
       const next: Record<string, string> = {};
-      quizQuestions.forEach((q) => {
-        next[q.questionId] = prev[q.questionId] ?? "";
+      activeQuiz.questions.forEach((q) => {
+        next[q.questionId] = quizResponses[q.questionId] ?? "";
       });
-      return next;
-    });
-  }, [quizQuestions]);
+      setQuizResponses(next);
+    } else {
+      setQuizResponses({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQuiz?.questions]);
 
   const sessionTitle = useMemo(() => {
     const session = sessions.find((s) => s.id === activeSessionId);
@@ -147,6 +155,7 @@ function App() {
     setSidebarOpen(false);
     setError(null);
     clearQuiz();
+    setUiMode("chat");
     const result = await fetchSession(id);
     if (result.ok && result.session) {
       const toRole = (role: string): Role =>
@@ -191,20 +200,19 @@ function App() {
       return;
     }
     setStatusNote(null);
-    addMessage({
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: `Uploaded successfully. Indexed ${result.saved ?? 0} chunks from ${file.name}.`,
-      createdAt: Date.now(),
-    });
   }
 
   async function handleSend(text: string, level: string) {
     const trimmed = text.trim();
     if (!trimmed || streaming) return;
+    if (uiMode !== "chat") {
+      setError("Finish the current quiz or return to chat first.");
+      return;
+    }
     setError(null);
     setStatusNote("Thinking…");
     clearQuiz();
+    setUiMode("chat");
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -261,32 +269,24 @@ function App() {
                 type: q.type,
                 options: q.options,
               }));
-              setQuizState({ questions, attemptId: evt.result.attemptId });
-              updateMessage(assistantId, {
-                content: `Generated a ${questions.length}-question quiz. Fill it out below.`,
-                streaming: false,
-              });
+              setActiveQuiz({ questions, attemptId: evt.result.attemptId });
+              setUiMode("quiz");
+              removeMessage(assistantId);
               return;
             }
             if (isQuizEvaluation(evt.result)) {
-              setQuizState({
-                questions: quizQuestions,
-                attemptId: evt.result.attemptId ?? quizAttemptId,
-                result: {
-                  attemptId: evt.result.attemptId ?? quizAttemptId,
-                  score: evt.result.score,
-                  feedback: (evt.result.feedback || []).map((f) => ({
-                    questionId: f.questionId,
-                    result: f.result ?? "Pending",
-                    explanation: f.explanation,
-                  })),
-                  weakAreas: evt.result.weakAreas,
-                },
+              setQuizResult({
+                attemptId: evt.result.attemptId,
+                score: evt.result.score,
+                feedback: (evt.result.feedback || []).map((f) => ({
+                  questionId: f.questionId,
+                  result: f.result ?? "Pending",
+                  explanation: f.explanation,
+                })),
+                weakAreas: evt.result.weakAreas,
               });
-              updateMessage(assistantId, {
-                content: `Quiz graded. Score: ${Math.round((evt.result.score ?? 0) * 100) / 100}%`,
-                streaming: false,
-              });
+              setUiMode("results");
+              removeMessage(assistantId);
               return;
             }
 
@@ -359,57 +359,274 @@ function App() {
     resetMessages();
     setActiveSession(undefined);
     clearQuiz();
+    setUiMode("chat");
     persistedCountRef.current = 0;
   }
 
   async function handleQuizSubmit() {
-    if (!quizAttemptId) {
+    if (!activeQuiz?.attemptId) {
       setError("Generate a quiz first.");
       return;
     }
-    const responses = quizQuestions.map((q) => ({
+    const responses = (activeQuiz.questions || []).map((q) => ({
       questionId: q.questionId,
-      answer: (quizAnswers[q.questionId] || "").trim(),
+      answer: (quizResponses[q.questionId] || "").trim(),
     }));
     setGrading(true);
     setError(null);
-    const result = await evaluateQuizAttempt(quizAttemptId, responses);
+    const result = await evaluateQuizAttempt(activeQuiz.attemptId, responses);
     setGrading(false);
     if (!result.ok || !result.result) {
       setError(result.error ?? "Failed to grade quiz");
       return;
     }
-    setQuizState({
-      questions: quizQuestions,
-      attemptId: result.result.attemptId ?? quizAttemptId,
-      result: {
-        attemptId: result.result.attemptId ?? quizAttemptId,
-        score: result.result.score,
-        feedback: (result.result.feedback || []).map((f) => ({
-          questionId: f.questionId,
-          result: f.result ?? "Pending",
-          explanation: f.explanation,
-        })),
-        weakAreas: result.result.weakAreas,
-      },
+    setQuizResult({
+      attemptId: result.result.attemptId ?? activeQuiz.attemptId,
+      score: result.result.score,
+      feedback: (result.result.feedback || []).map((f) => ({
+        questionId: f.questionId,
+        result: f.result ?? "Pending",
+        explanation: f.explanation,
+      })),
+      weakAreas: result.result.weakAreas,
     });
-    addMessage({
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: `Quiz graded. Score: ${Math.round((result.result.score ?? 0) * 100) / 100}%`,
-      createdAt: Date.now(),
-    });
+    setUiMode("results");
+  }
+
+  const filteredMessages = messages.filter((m) => m.content.trim().length > 0);
+
+  function renderChatMessages() {
+    return (
+      <div className="max-w-3xl mx-auto space-y-4">
+        {filteredMessages.map((m) => (
+          <div
+            key={m.id}
+            className={`max-w-3xl rounded-2xl border px-4 py-3 shadow-sm ${
+              m.role === "user"
+                ? "bg-white text-slate-900 border-slate-200 ml-auto"
+                : "bg-slate-100 text-slate-900 border-slate-200"
+            }`}
+          >
+            <div className="text-xs font-semibold mb-1 uppercase tracking-wide text-slate-500">
+              {m.role === "user" ? "You" : "Assistant"}
+            </div>
+            <div className="whitespace-pre-wrap text-base leading-relaxed">
+              {m.streaming ? "…" : m.content}
+            </div>
+          </div>
+        ))}
+        {filteredMessages.length === 0 && (
+          <div className="text-sm text-slate-600 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            Ask anything about your notes, request a quiz, or paste quiz answers
+            to grade them.
+          </div>
+        )}
+        <div ref={scrollAnchorRef} />
+      </div>
+    );
+  }
+
+  function renderQuizCard() {
+    if (uiMode !== "quiz" || !activeQuiz?.questions?.length) return null;
+    return (
+      <div className="max-w-3xl mx-auto mt-4 space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-lg p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">
+                Quiz ready ({activeQuiz.questions.length} questions)
+              </div>
+              <div className="text-xs text-slate-500">
+                Generated from your notes. Fill answers then grade.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={clearQuiz}
+              className="text-xs rounded-lg px-3 py-1"
+              style={{
+                border: "1px solid var(--brand-border)",
+                color: "var(--brand)",
+                background: "var(--brand-bg-muted)",
+              }}
+            >
+              Back to chat
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {activeQuiz.questions.map((q, idx) => (
+              <div
+                key={q.questionId}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2"
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <span className="text-xs text-slate-500">Q{idx + 1}</span>
+                  <span>{q.prompt}</span>
+                </div>
+                {q.type === "mcq" &&
+                Array.isArray(q.options) &&
+                q.options.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {q.options.map((opt) => (
+                      <label
+                        key={opt}
+                        className={`rounded-lg border px-3 py-2 text-sm cursor-pointer transition ${
+                          quizResponses[q.questionId] === opt
+                            ? "border-emerald-400 bg-emerald-50"
+                            : "border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name={q.questionId}
+                          value={opt}
+                          className="mr-2 accent-emerald-500"
+                          checked={quizResponses[q.questionId] === opt}
+                          onChange={(e) =>
+                            updateQuizResponse(q.questionId, e.target.value)
+                          }
+                          disabled={grading}
+                        />
+                        {opt}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+                    rows={2}
+                    placeholder="Type your short answer"
+                    value={quizResponses[q.questionId] || ""}
+                    onChange={(e) =>
+                      updateQuizResponse(q.questionId, e.target.value)
+                    }
+                    disabled={grading}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-slate-500">
+              Answer everything, then grade.
+            </div>
+            <button
+              type="button"
+              onClick={handleQuizSubmit}
+              disabled={grading}
+              className="rounded-xl text-white px-4 py-2 text-sm font-semibold shadow disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: "var(--brand)" }}
+            >
+              {grading ? "Grading…" : "Submit answers"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderResultsCard() {
+    if (uiMode !== "results" || !quizResult) return null;
+    const weakAreas = quizResult.weakAreas || [];
+    const truncate = (s: string) => (s.length > 64 ? `${s.slice(0, 64)}…` : s);
+    return (
+      <div className="max-w-3xl mx-auto mt-4 space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-lg p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">Quiz results</div>
+              <div className="text-xs text-slate-500">
+                Grounded answers from your notes.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={clearQuiz}
+              className="text-xs rounded-lg px-3 py-1"
+              style={{
+                border: "1px solid var(--brand-border)",
+                color: "var(--brand)",
+                background: "var(--brand-bg-muted)",
+              }}
+            >
+              Back to chat
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div
+              className="text-3xl font-extrabold"
+              style={{ color: "var(--brand)" }}
+            >
+              {Math.round((quizResult.score ?? 0) * 100) / 100}%
+            </div>
+            <div className="text-sm text-slate-600">Final score</div>
+          </div>
+
+          {weakAreas.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-slate-700">
+                Weak areas
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {weakAreas.map((w) => (
+                  <span
+                    key={w}
+                    className="text-xs rounded-full px-3 py-1"
+                    style={{
+                      border: "1px solid var(--brand-border)",
+                      background: "var(--brand-badge-bg)",
+                      color: "var(--brand)",
+                    }}
+                  >
+                    {truncate(w)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {(quizResult.feedback || []).map((f) => (
+              <div
+                key={f.questionId}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1"
+              >
+                <div className="flex items-center justify-between text-sm font-semibold">
+                  <span>Question</span>
+                  <span
+                    className="text-xs rounded-full px-2 py-1"
+                    style={{
+                      border: "1px solid var(--brand-border)",
+                      background: "var(--brand-badge-bg)",
+                      color: "var(--brand)",
+                    }}
+                  >
+                    {f.result ?? "Pending"}
+                  </span>
+                </div>
+                {f.explanation && (
+                  <div className="text-xs text-slate-700 leading-relaxed">
+                    {f.explanation}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 flex">
+    <div className="h-screen overflow-hidden bg-slate-100 text-slate-900">
       <aside
-        className={`${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 fixed md:static inset-y-0 left-0 z-20 w-72 bg-white border-r border-slate-200 shadow-lg md:shadow-none transition-transform duration-200 ease-out flex flex-col`}
+        className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 fixed md:fixed inset-y-0 left-0 z-20 w-72 bg-white border-r border-slate-200 shadow-lg transition-transform duration-200 ease-out flex flex-col overflow-hidden`}
       >
         <div className="flex items-center justify-between px-4 h-14 border-b border-slate-200">
-          <span className="font-semibold">Sessions</span>
+          <span className="font-semibold">History</span>
           <button
             className="md:hidden text-sm text-slate-500"
             onClick={() => setSidebarOpen(false)}
@@ -418,7 +635,7 @@ function App() {
             ✕
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1">
           {sessions.map((s) => (
             <button
               key={s.id}
@@ -447,19 +664,11 @@ function App() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-h-screen bg-slate-50">
-        <header
-          className="flex items-center justify-between px-4 md:px-6 h-14 border-b"
-          style={{
-            backgroundColor: BRAND,
-            borderColor: "transparent",
-            color: "#fff",
-          }}
-        >
+      <main className="ml-0 md:ml-72 flex flex-col h-screen bg-slate-50 overflow-hidden">
+        <header className="flex items-center justify-between px-4 md:px-6 h-14 bg-[#152737] text-white">
           <div className="flex items-center gap-3">
             <button
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border"
-              style={{ borderColor: "rgba(255,255,255,0.4)", color: "#fff" }}
+              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/40 text-white"
               onClick={() => setSidebarOpen((v) => !v)}
               aria-label="Toggle sidebar"
             >
@@ -471,21 +680,13 @@ function App() {
                   aria-hidden
                   className="inline-block h-6 w-6 rounded-full bg-white/20"
                 />
-                <span
-                  className="text-sm font-extrabold"
-                  style={{ color: "#fff" }}
-                >
-                  Qesem
-                </span>
+                <span className="text-sm font-extrabold text-white">Qesem</span>
               </div>
               <div>
-                <div
-                  className="text-sm font-semibold"
-                  style={{ color: "#fff" }}
-                >
+                <div className="text-sm font-semibold text-white/80">
                   {sessionTitle}
                 </div>
-                <div className="text-xs" style={{ color: "#e5e7eb" }}>
+                <div className="text-xs text-white/70">
                   Grounded answers, quizzes, grading
                 </div>
               </div>
@@ -508,11 +709,7 @@ function App() {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-1 disabled:opacity-50"
-              style={{
-                border: "1px solid rgba(255,255,255,0.5)",
-                color: "#fff",
-              }}
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-1 border border-white/50 text-white disabled:opacity-50"
               aria-label="Upload notes (PDF/TXT)"
               title="Upload notes (PDF/TXT)"
             >
@@ -529,19 +726,10 @@ function App() {
               <span>Upload</span>
             </button>
             {statusNote && (
-              <span className="animate-pulse" style={{ color: "#fff" }}>
-                {statusNote}
-              </span>
+              <span className="animate-pulse text-white">{statusNote}</span>
             )}
             {streaming && (
-              <span
-                className="px-2 py-1 rounded-full"
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.12)",
-                  border: "1px solid rgba(255,255,255,0.3)",
-                  color: "#fff",
-                }}
-              >
+              <span className="px-2 py-1 rounded-full bg-white/10 border border-white/30 text-white">
                 Streaming…
               </span>
             )}
@@ -552,178 +740,20 @@ function App() {
           className="flex-1 overflow-y-auto px-4 md:px-6 py-4"
           ref={messagesEndRef}
         >
-          <div className="max-w-4xl mx-auto space-y-4">
-            {messages.map((m) => (
-              <div
-                key={m.id}
-                className={`max-w-3xl rounded-2xl border px-4 py-3 shadow-sm ${
-                  m.role === "user"
-                    ? "bg-white text-slate-900 border-slate-200 ml-auto"
-                    : "bg-slate-100 text-slate-900 border-slate-200"
-                }`}
-              >
-                <div className="text-xs font-semibold mb-1 uppercase tracking-wide text-slate-500">
-                  {m.role === "user" ? "You" : "Assistant"}
-                </div>
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {m.streaming ? "…" : m.content}
-                </div>
-              </div>
-            ))}
-            {messages.length === 0 && (
-              <div className="text-sm text-slate-600 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                Ask anything about your notes, request a quiz, or paste quiz
-                answers to grade them.
-              </div>
-            )}
-
-            {quizQuestions.length > 0 && (
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-lg p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold">
-                      Quiz ready ({quizQuestions.length} questions)
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Generated from your notes. Fill answers then grade.
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={clearQuiz}
-                    className="text-xs rounded-lg border border-slate-200 px-3 py-1 text-slate-600 hover:bg-slate-100"
-                  >
-                    Clear quiz
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {quizQuestions.map((q, idx) => {
-                    const feedback = quizResult?.feedback?.find(
-                      (f) => f.questionId === q.questionId,
-                    );
-                    const resultBadge = feedback?.result;
-                    return (
-                      <div
-                        key={q.questionId}
-                        className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2"
-                      >
-                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                          <span className="text-xs text-slate-500">
-                            Q{idx + 1}
-                          </span>
-                          <span>{q.prompt}</span>
-                        </div>
-                        {q.type === "mcq" &&
-                        Array.isArray(q.options) &&
-                        q.options.length > 0 ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {q.options.map((opt) => (
-                              <label
-                                key={opt}
-                                className={`rounded-lg border px-3 py-2 text-sm cursor-pointer transition ${
-                                  quizAnswers[q.questionId] === opt
-                                    ? "border-emerald-400 bg-emerald-50"
-                                    : "border-slate-200 hover:border-slate-300"
-                                }`}
-                              >
-                                <input
-                                  type="radio"
-                                  name={q.questionId}
-                                  value={opt}
-                                  className="mr-2 accent-emerald-500"
-                                  checked={quizAnswers[q.questionId] === opt}
-                                  onChange={(e) =>
-                                    setQuizAnswers((prev) => ({
-                                      ...prev,
-                                      [q.questionId]: e.target.value,
-                                    }))
-                                  }
-                                  disabled={grading}
-                                />
-                                {opt}
-                              </label>
-                            ))}
-                          </div>
-                        ) : (
-                          <textarea
-                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
-                            rows={2}
-                            placeholder="Type your short answer"
-                            value={quizAnswers[q.questionId] || ""}
-                            onChange={(e) =>
-                              setQuizAnswers((prev) => ({
-                                ...prev,
-                                [q.questionId]: e.target.value,
-                              }))
-                            }
-                            disabled={grading}
-                          />
-                        )}
-                        {resultBadge && (
-                          <div
-                            className={`text-xs font-semibold inline-flex items-center gap-2 rounded-full px-3 py-1 border ${
-                              resultBadge === "Correct"
-                                ? "border-emerald-500 text-emerald-700 bg-emerald-50"
-                                : "border-amber-500 text-amber-700 bg-amber-50"
-                            }`}
-                          >
-                            {resultBadge}
-                            {feedback?.explanation && (
-                              <span className="text-slate-600 font-normal">
-                                {feedback.explanation}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  {quizResult?.score !== undefined ? (
-                    <div className="text-sm text-emerald-700 font-semibold">
-                      Score: {Math.round((quizResult.score ?? 0) * 100) / 100}%
-                    </div>
-                  ) : (
-                    <div className="text-xs text-slate-500">
-                      Answer everything, then grade.
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleQuizSubmit}
-                    disabled={grading}
-                    className="rounded-xl text-white px-4 py-2 text-sm font-semibold shadow disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: BRAND }}
-                  >
-                    {grading ? "Grading…" : "Submit answers"}
-                  </button>
-                </div>
-
-                {quizResult?.weakAreas && quizResult.weakAreas.length > 0 && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 space-y-2">
-                    <div className="font-semibold">Weak areas</div>
-                    <ul className="list-disc pl-4 space-y-1">
-                      {quizResult.weakAreas.map((w) => (
-                        <li key={w}>{w}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {error && <div className="text-sm text-red-400">{error}</div>}
-            <div ref={scrollAnchorRef} />
-          </div>
+          {renderChatMessages()}
+          {renderQuizCard()}
+          {renderResultsCard()}
+          {error && (
+            <div className="max-w-3xl mx-auto text-sm text-red-400 mt-4">
+              {error}
+            </div>
+          )}
         </div>
 
-        <div className="border-t border-slate-200 bg-white px-4 md:px-6 py-3">
+        <div className="shrink-0 border-t border-slate-200 bg-white px-4 md:px-6 py-3">
           <div className="max-w-4xl mx-auto">
             <ChatInput
-              disabled={streaming}
+              disabled={streaming || uiMode !== "chat"}
               onSend={({ text, level }) => handleSend(text, level)}
               placeholder="Explain a topic, generate a quiz, or grade answers..."
             />

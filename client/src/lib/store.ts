@@ -16,6 +16,8 @@ export interface SessionItem {
   time?: string;
 }
 
+export type UiMode = "chat" | "quiz" | "results";
+
 export interface QuizQuestion {
   questionId: string;
   prompt: string;
@@ -30,23 +32,34 @@ export interface QuizResult {
   weakAreas?: string[];
 }
 
+export interface ActiveQuiz {
+  attemptId?: string;
+  questions: QuizQuestion[];
+}
+
 interface ChatState {
   messages: Message[];
   sessions: SessionItem[];
   activeSessionId?: string;
   streaming: boolean;
-  quizQuestions: QuizQuestion[];
-  quizAttemptId?: string;
+  uiMode: UiMode;
+  activeQuiz?: ActiveQuiz;
+  quizResponses: Record<string, string>;
   quizResult?: QuizResult;
   setSessions: (sessions: SessionItem[]) => void;
   setActiveSession: (id: string | undefined) => void;
   setMessages: (messages: Message[]) => void;
   addMessage: (msg: Message) => void;
   updateMessage: (id: string, partial: Partial<Message>) => void;
+  removeMessage: (id: string) => void;
   appendMessage: (id: string, text: string) => void;
   resetMessages: () => void;
   setStreaming: (value: boolean) => void;
-  setQuizState: (payload: { questions: QuizQuestion[]; result?: QuizResult; attemptId?: string }) => void;
+  setUiMode: (mode: UiMode) => void;
+  setActiveQuiz: (quiz: ActiveQuiz | undefined) => void;
+  setQuizResult: (result: QuizResult | undefined) => void;
+  setQuizResponses: (responses: Record<string, string>) => void;
+  updateQuizResponse: (questionId: string, value: string) => void;
   clearQuiz: () => void;
 }
 
@@ -55,8 +68,9 @@ export const useChatStore = create<ChatState>((set) => ({
   sessions: [],
   activeSessionId: undefined,
   streaming: false,
-  quizQuestions: [],
-  quizAttemptId: undefined,
+  uiMode: "chat",
+  activeQuiz: undefined,
+  quizResponses: {},
   quizResult: undefined,
   setSessions: (sessions) => set(() => ({ sessions })),
   setActiveSession: (id) => set(() => ({ activeSessionId: id })),
@@ -66,6 +80,8 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => ({
       messages: state.messages.map((m) => (m.id === id ? { ...m, ...partial } : m)),
     })),
+  removeMessage: (id) =>
+    set((state) => ({ messages: state.messages.filter((m) => m.id !== id) })),
   appendMessage: (id, text) =>
     set((state) => ({
       messages: state.messages.map((m) =>
@@ -74,7 +90,23 @@ export const useChatStore = create<ChatState>((set) => ({
     })),
   resetMessages: () => set(() => ({ messages: [] })),
   setStreaming: (value) => set(() => ({ streaming: value })),
-  setQuizState: ({ questions, result, attemptId }) =>
-    set(() => ({ quizQuestions: questions, quizResult: result, quizAttemptId: attemptId })),
-  clearQuiz: () => set(() => ({ quizQuestions: [], quizResult: undefined, quizAttemptId: undefined })),
+  setUiMode: (mode) => set(() => ({ uiMode: mode })),
+  setActiveQuiz: (quiz) =>
+    set(() => ({
+      activeQuiz: quiz,
+      quizResult: quiz ? undefined : undefined,
+      uiMode: quiz ? "quiz" : "chat",
+      quizResponses: quiz ? {} : {},
+    })),
+  setQuizResult: (quizResult) => set(() => ({ quizResult })),
+  setQuizResponses: (quizResponses) => set(() => ({ quizResponses })),
+  updateQuizResponse: (questionId, value) =>
+    set((state) => ({ quizResponses: { ...state.quizResponses, [questionId]: value } })),
+  clearQuiz: () =>
+    set(() => ({
+      activeQuiz: undefined,
+      quizResult: undefined,
+      quizResponses: {},
+      uiMode: "chat",
+    })),
 }));
