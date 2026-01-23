@@ -1,3 +1,9 @@
+import dotenv from 'dotenv'
+
+dotenv.config()
+
+
+
 const GOOGLE_API_ROOT = 'https://generativelanguage.googleapis.com/v1/models'
 
 function getApiKey() {
@@ -7,7 +13,7 @@ function getApiKey() {
 }
 
 function getModel() {
-  return process.env.GEMINI_MODEL || 'gemini-1.5-flash'
+  return process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 }
 
 function buildRequestBody(prompt: string) {

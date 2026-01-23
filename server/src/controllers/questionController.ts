@@ -29,6 +29,7 @@ export async function postQuestion(req: Request, res: Response) {
       mode: 'explain',
       answer: explain.answer,
       sources: explain.sources,
+      chunks: explain.retrieved,
       guardFailed: explain.guardFailed
     })
   } catch (err) {
