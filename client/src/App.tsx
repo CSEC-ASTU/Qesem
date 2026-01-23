@@ -13,8 +13,6 @@ import {
 import { useChatStore, type Message, type Role } from "./lib/store";
 import { uploadNotes } from "./lib/api";
 
-const BRAND = "#152737";
-
 function formatResult(result: unknown): string {
   if (!result) return "";
   if (typeof result === "string") return result;
@@ -143,11 +141,6 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeQuiz?.questions]);
-
-  const sessionTitle = useMemo(() => {
-    const session = sessions.find((s) => s.id === activeSessionId);
-    return session?.title ?? "New chat";
-  }, [sessions, activeSessionId]);
 
   const lastUserPrompt = useMemo(() => {
     const u = messages.filter(
@@ -412,20 +405,20 @@ function App() {
             key={m.id}
             className={`max-w-3xl rounded-2xl border px-4 py-3 shadow-sm ${
               m.role === "user"
-                ? "bg-white text-slate-900 border-slate-200 ml-auto"
-                : "bg-slate-100 text-slate-900 border-slate-200"
+                ? "bg-[#303030] text-white border-white/40 ml-auto"
+                : "bg-[#212121] text-white border-white/20"
             }`}
           >
-            <div className="text-xs font-semibold mb-1 uppercase tracking-wide text-slate-500">
+            <div className="text-xs font-semibold mb-1 uppercase tracking-wide text-white/60">
               {m.role === "user" ? "You" : "Assistant"}
             </div>
-            <div className="whitespace-pre-wrap text-base leading-relaxed">
+            <div className="whitespace-pre-wrap text-base leading-relaxed text-white">
               {m.streaming ? "…" : m.content}
             </div>
           </div>
         ))}
         {filteredMessages.length === 0 && (
-          <div className="text-sm text-slate-600 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-sm text-white/80 rounded-xl border border-white/30 bg-[#303030] p-4 shadow-sm">
             Ask anything about your notes, request a quiz, or paste quiz answers
             to grade them.
           </div>
@@ -439,25 +432,20 @@ function App() {
     if (uiMode !== "quiz" || !activeQuiz?.questions?.length) return null;
     return (
       <div className="max-w-3xl mx-auto mt-4 space-y-3">
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-lg p-5 space-y-3">
+        <div className="rounded-2xl border border-white bg-[#212121] shadow-lg p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-semibold">
+              <div className="text-sm font-semibold text-white">
                 Quiz ready ({activeQuiz.questions.length} questions)
               </div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-white/70">
                 Generated from your notes. Fill answers then grade.
               </div>
             </div>
             <button
               type="button"
               onClick={clearQuiz}
-              className="text-xs rounded-lg px-3 py-1"
-              style={{
-                border: "1px solid var(--brand-border)",
-                color: "var(--brand)",
-                background: "var(--brand-bg-muted)",
-              }}
+              className="text-xs rounded-lg px-3 py-1 border border-white text-white bg-[#212121] hover:bg-[#303030]"
             >
               Back to chat
             </button>
@@ -467,10 +455,10 @@ function App() {
             {activeQuiz.questions.map((q, idx) => (
               <div
                 key={q.questionId}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2"
+                className="rounded-xl border border-white/30 bg-[#303030] p-4 space-y-2"
               >
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <span className="text-xs text-slate-500">Q{idx + 1}</span>
+                <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                  <span className="text-xs text-white/60">Q{idx + 1}</span>
                   <span>{q.prompt}</span>
                 </div>
                 {q.type === "mcq" &&
@@ -482,15 +470,15 @@ function App() {
                         key={opt}
                         className={`rounded-lg border px-3 py-2 text-sm cursor-pointer transition ${
                           quizResponses[q.questionId] === opt
-                            ? "border-emerald-400 bg-emerald-50"
-                            : "border-slate-200 hover:border-slate-300"
+                            ? "border-white bg-[#212121] text-white"
+                            : "border-white/30 bg-[#212121] hover:border-white text-white"
                         }`}
                       >
                         <input
                           type="radio"
                           name={q.questionId}
                           value={opt}
-                          className="mr-2 accent-emerald-500"
+                          className="mr-2 accent-white"
                           checked={quizResponses[q.questionId] === opt}
                           onChange={(e) =>
                             updateQuizResponse(q.questionId, e.target.value)
@@ -503,7 +491,7 @@ function App() {
                   </div>
                 ) : (
                   <textarea
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+                    className="w-full rounded-lg border border-white/30 bg-[#212121] px-3 py-2 text-sm text-white placeholder:text-white/50 focus:border-white focus:ring-1 focus:ring-white"
                     rows={2}
                     placeholder="Type your short answer"
                     value={quizResponses[q.questionId] || ""}
@@ -518,15 +506,14 @@ function App() {
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-white/70">
               Answer everything, then grade.
             </div>
             <button
               type="button"
               onClick={handleQuizSubmit}
               disabled={grading}
-              className="rounded-xl text-white px-4 py-2 text-sm font-semibold shadow disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: "var(--brand)" }}
+              className="rounded-xl text-white px-4 py-2 text-sm font-semibold shadow disabled:opacity-50 disabled:cursor-not-allowed bg-[#212121] border border-white hover:bg-[#303030]"
             >
               {grading ? "Grading…" : "Submit answers"}
             </button>
@@ -542,53 +529,40 @@ function App() {
     const truncate = (s: string) => (s.length > 64 ? `${s.slice(0, 64)}…` : s);
     return (
       <div className="max-w-3xl mx-auto mt-4 space-y-3">
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-lg p-5 space-y-4">
+        <div className="rounded-2xl border border-white bg-[#212121] shadow-lg p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-semibold">Quiz results</div>
-              <div className="text-xs text-slate-500">
+              <div className="text-sm font-semibold text-white">
+                Quiz results
+              </div>
+              <div className="text-xs text-white/70">
                 Grounded answers from your notes.
               </div>
             </div>
             <button
               type="button"
               onClick={clearQuiz}
-              className="text-xs rounded-lg px-3 py-1"
-              style={{
-                border: "1px solid var(--brand-border)",
-                color: "var(--brand)",
-                background: "var(--brand-bg-muted)",
-              }}
+              className="text-xs rounded-lg px-3 py-1 border border-white text-white bg-[#212121] hover:bg-[#303030]"
             >
               Back to chat
             </button>
           </div>
 
           <div className="flex items-center gap-3">
-            <div
-              className="text-3xl font-extrabold"
-              style={{ color: "var(--brand)" }}
-            >
+            <div className="text-3xl font-extrabold text-white">
               {Math.round((quizResult.score ?? 0) * 100) / 100}%
             </div>
-            <div className="text-sm text-slate-600">Final score</div>
+            <div className="text-sm text-white/70">Final score</div>
           </div>
 
           {weakAreas.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs font-semibold text-slate-700">
-                Weak areas
-              </div>
+              <div className="text-xs font-semibold text-white">Weak areas</div>
               <div className="flex flex-wrap gap-2">
                 {weakAreas.map((w) => (
                   <span
                     key={w}
-                    className="text-xs rounded-full px-3 py-1"
-                    style={{
-                      border: "1px solid var(--brand-border)",
-                      background: "var(--brand-badge-bg)",
-                      color: "var(--brand)",
-                    }}
+                    className="text-xs rounded-full px-3 py-1 border border-white/30 bg-[#303030] text-white"
                   >
                     {truncate(w)}
                   </span>
@@ -601,23 +575,16 @@ function App() {
             {(quizResult.feedback || []).map((f) => (
               <div
                 key={f.questionId}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1"
+                className="rounded-xl border border-white/30 bg-[#303030] p-3 space-y-1"
               >
                 <div className="flex items-center justify-between text-sm font-semibold">
-                  <span>Question</span>
-                  <span
-                    className="text-xs rounded-full px-2 py-1"
-                    style={{
-                      border: "1px solid var(--brand-border)",
-                      background: "var(--brand-badge-bg)",
-                      color: "var(--brand)",
-                    }}
-                  >
+                  <span className="text-white">Question</span>
+                  <span className="text-xs rounded-full px-2 py-1 border border-white/30 bg-[#212121] text-white">
                     {f.result ?? "Pending"}
                   </span>
                 </div>
                 {f.explanation && (
-                  <div className="text-xs text-slate-700 leading-relaxed">
+                  <div className="text-xs text-white/80 leading-relaxed">
                     {f.explanation}
                   </div>
                 )}
@@ -629,67 +596,75 @@ function App() {
     );
   }
 
+  // Dark, minimal shell using the prescribed palette and white separators
   return (
-    <div className="h-screen overflow-hidden bg-slate-100 text-slate-900">
+    <div
+      className="h-screen overflow-hidden bg-[#212121] text-white"
+      style={{
+        fontFamily:
+          'ui-sans-serif, -apple-system, "system-ui", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, "sans-serif", "Segoe UI Emoji", "Segoe UI Symbol"',
+        fontSize: "20px",
+        lineHeight: "28px",
+        fontWeight: 600,
+      }}
+    >
       <aside
-        className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 fixed md:fixed inset-y-0 left-0 z-20 w-72 bg-white border-r border-slate-200 shadow-lg transition-transform duration-200 ease-out flex flex-col overflow-hidden`}
+        className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 fixed inset-y-0 left-0 z-20 w-72 bg-[#212121] border-r border-white transition-transform duration-200 ease-out flex flex-col overflow-hidden`}
       >
-        <div className="flex items-center justify-between px-4 h-14 border-b border-slate-200">
-          <span className="font-semibold">History</span>
+        <div className="flex items-center justify-between px-4 h-14 border-b border-white">
+          <span className="font-semibold text-white">History</span>
           <button
-            className="md:hidden text-sm text-slate-500"
+            className="md:hidden text-sm text-white hover:text-white/80"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close sidebar"
           >
             ✕
           </button>
         </div>
-        <div className="flex-1">
+        <div className="flex-1 overflow-y-auto">
           {sessions.map((s) => (
             <button
               key={s.id}
               onClick={() => {
                 handleSelectSession(s.id);
               }}
-              className={`w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition ${
-                s.id === activeSessionId ? "bg-slate-100" : ""
-              }`}
+              className={`w-full text-left px-4 py-3 border-b border-white/20 hover:bg-[#303030] transition ${
+                s.id === activeSessionId ? "bg-[#303030]" : ""
+              } text-white`}
             >
               <div className="font-medium line-clamp-1">{s.title}</div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-white/70">
                 {loadingSessionId === s.id ? "Loading…" : (s.time ?? "")}
               </div>
             </button>
           ))}
         </div>
-        <div className="p-4 border-t border-slate-200">
+        <div className="p-4 border-t border-white bg-[#212121]">
           <button
             onClick={handleNewChat}
-            className="w-full rounded-lg text-white py-2.5 text-sm font-semibold transition"
-            style={{ backgroundColor: BRAND }}
+            className="w-full rounded-lg py-2.5 text-sm font-semibold text-white bg-[#212121] border border-white hover:bg-[#303030] transition"
           >
             + New chat
           </button>
         </div>
       </aside>
-
-      <main className="ml-0 md:ml-72 flex flex-col h-screen bg-slate-50 overflow-hidden">
-        <header className="sticky top-0 z-20 px-4 md:px-6 py-3 border-b shadow-sm bg-slate-50 dark:bg-slate-900">
+      <main className="ml-0 md:ml-72 flex flex-col h-screen bg-[#212121] overflow-hidden">
+        <header className="sticky top-0 z-20 px-4 md:px-6 py-4 border-b border-white bg-[#212121]">
           <div className="flex items-center justify-between">
             <div className="flex-1 space-y-1">
               <div className="flex items-center gap-2">
                 <span
                   aria-hidden
-                  className="inline-block h-6 w-6 rounded-full bg-slate-200 dark:bg-slate-700"
+                  className="inline-block h-7 w-7 rounded-full bg-[#303030] ring-2 ring-white/30"
                 />
-                <span className="text-lg md:text-xl font-semibold text-slate-900 dark:text-slate-100">
+                <span className="text-lg md:text-xl font-semibold text-white tracking-tight">
                   Qesem
                 </span>
               </div>
-              <div className="text-sm md:text-base text-gray-700 dark:text-gray-300 truncate">
+              <div className="text-sm md:text-base text-white/80 truncate">
                 {lastUserPrompt}
               </div>
-              <div className="text-xs md:text-sm text-gray-500">
+              <div className="text-xs md:text-sm text-white/60">
                 Grounded answers, quizzes, grading
               </div>
             </div>
@@ -709,7 +684,7 @@ function App() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white border border-white bg-[#212121] hover:bg-[#303030] disabled:opacity-50"
                 aria-label="Upload notes (PDF/TXT)"
                 title="Upload notes (PDF/TXT)"
               >
@@ -726,12 +701,12 @@ function App() {
                 <span>Upload</span>
               </button>
               {statusNote && (
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                <span className="text-xs font-medium text-white/80">
                   {statusNote}
                 </span>
               )}
               {streaming && (
-                <span className="text-xs rounded-full px-2 py-1 bg-slate-100 border border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200">
+                <span className="text-xs rounded-full px-2 py-1 bg-[#212121] border border-white text-white">
                   Streaming…
                 </span>
               )}
@@ -740,20 +715,20 @@ function App() {
         </header>
 
         <div
-          className="flex-1 overflow-y-auto px-4 md:px-6 py-4"
+          className="flex-1 overflow-y-auto px-4 md:px-6 py-4 bg-[#212121]"
           ref={messagesEndRef}
         >
           {renderChatMessages()}
           {renderQuizCard()}
           {renderResultsCard()}
           {error && (
-            <div className="max-w-3xl mx-auto text-sm text-red-400 mt-4">
+            <div className="max-w-3xl mx-auto text-sm text-red-300 mt-4">
               {error}
             </div>
           )}
         </div>
 
-        <div className="shrink-0 border-t border-slate-200 bg-white px-4 md:px-6 py-3">
+        <div className="shrink-0 border-t border-white bg-[#303030] px-4 md:px-6 py-3">
           <div className="max-w-4xl mx-auto">
             <ChatInput
               disabled={streaming || uiMode !== "chat"}

@@ -15,8 +15,6 @@ interface ChatInputProps {
 
 const levels: Level[] = ["ELI5", "ELI15", "EXAM"];
 
-const BRAND = "#152737";
-
 export function ChatInput({ disabled, placeholder, onSend }: ChatInputProps) {
   const [text, setText] = useState("");
   const [level, setLevel] = useState<Level>("ELI5");
@@ -38,16 +36,16 @@ export function ChatInput({ disabled, placeholder, onSend }: ChatInputProps) {
 
   return (
     <div className="flex w-full gap-2">
-      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2 shadow-sm focus-within:border-slate-900 focus-within:ring-2 focus-within:ring-slate-200 flex-1">
+      <div className="flex items-center gap-2 rounded-xl border border-white/40 bg-[#303030] px-2 py-2 shadow-sm focus-within:border-white focus-within:ring-1 focus-within:ring-white flex-1">
         <select
           value={level}
           onChange={(e) => setLevel(e.target.value as Level)}
-          className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm font-medium text-slate-700 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-200"
+          className="h-9 rounded-lg border border-white/40 bg-[#212121] px-2 text-sm font-medium text-white focus:border-white focus:outline-none focus:ring-1 focus:ring-white"
           disabled={disabled}
           aria-label="Explanation level"
         >
           {levels.map((opt) => (
-            <option key={opt} value={opt}>
+            <option key={opt} value={opt} className="bg-[#212121] text-white">
               {opt}
             </option>
           ))}
@@ -64,7 +62,7 @@ export function ChatInput({ disabled, placeholder, onSend }: ChatInputProps) {
             }
           }}
           rows={1}
-          className="flex-1 resize-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+          className="flex-1 resize-none bg-transparent text-sm text-white placeholder:text-white/60 focus:outline-none"
           placeholder={placeholder ?? "Ask a question or request a quiz..."}
           aria-label="Chat input"
           disabled={disabled}
@@ -74,8 +72,7 @@ export function ChatInput({ disabled, placeholder, onSend }: ChatInputProps) {
         type="button"
         onClick={submit}
         disabled={disabled || text.trim().length === 0}
-        className="h-11 rounded-xl px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{ backgroundColor: BRAND }}
+        className="h-11 rounded-xl px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-[#212121] border border-white hover:bg-[#303030]"
       >
         Send
       </button>
