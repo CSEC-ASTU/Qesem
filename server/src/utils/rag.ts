@@ -73,7 +73,12 @@ export async function vectorSearchChunks(query: string, options: VectorSearchOpt
     }
   ]
 
-  return DocumentChunk.aggregate(pipeline as any).exec()
+  try {
+    return await DocumentChunk.aggregate(pipeline as any).exec()
+  } catch (err: any) {
+    console.warn('vectorSearchChunks error, returning empty array:', err?.message || err)
+    return []
+  }
 }
 
 
