@@ -9,15 +9,18 @@ export interface PageText {
 
 interface ChunkOptions {
   chunkSize?: number
+  overlap?: number
 }
 
 export function chunkPagesToDocuments(pages: PageText[], options: ChunkOptions = {}) {
-  const chunkSize = options.chunkSize ?? 400
+  const chunkSize = options.chunkSize ?? 100
+  const overlap = options.overlap ?? 20
+  const step = Math.max(1, chunkSize - overlap)
   const chunks: Array<Omit<DocumentChunkAttrs, 'embedding'>> = []
 
   pages.forEach((page) => {
     const words = page.text.split(/\s+/).filter(Boolean)
-    for (let i = 0; i < words.length; i += chunkSize) {
+    for (let i = 0; i < words.length; i += step) {
       const slice = words.slice(i, i + chunkSize)
       chunks.push({
         documentName: '', // filled later
