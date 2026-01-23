@@ -10,7 +10,7 @@ const RawSessionSchema = z.object({
   _id: z.string().optional(),
   id: z.string().optional(),
   topic: z.string().optional(),
-  summary: z.any().optional(),
+  summary: z.string().optional(),
   createdAt: z.string().optional(),
   messages: z
     .array(
