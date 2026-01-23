@@ -8,7 +8,7 @@ import {
   type ChatEvent,
   type ChatRequest,
 } from "./lib/api";
-import { useChatStore, type Message } from "./lib/store";
+import { useChatStore, type Message, type Role } from "./lib/store";
 
 function formatResult(result: unknown): string {
   if (!result) return "";
@@ -27,27 +27,39 @@ function formatResult(result: unknown): string {
   }
 }
 
-function isQuizGeneration(result: unknown): result is {
+type QuizGenResult = {
   attemptId?: string;
-  questions: Array<{ questionId: string; prompt: string; type?: string; options?: string[] }>;
-} {
-  return !!(
-    result &&
-    typeof result === "object" &&
-    Array.isArray((result as any).questions)
-  );
-}
+  questions: Array<{
+    questionId: string;
+    prompt: string;
+    type?: string;
+    options?: string[];
+  }>;
+};
 
-function isQuizEvaluation(result: unknown): result is {
+type QuizEvalResult = {
   attemptId?: string;
   score?: number;
   weakAreas?: string[];
-  feedback?: Array<{ questionId: string; result: string; explanation?: string }>;
-} {
-  return !!(
-    result &&
-    typeof result === "object" &&
-    (typeof (result as any).score === "number" || Array.isArray((result as any).feedback))
+  feedback?: Array<{
+    questionId: string;
+    result?: string;
+    explanation?: string;
+  }>;
+};
+
+function isQuizGeneration(result: unknown): result is QuizGenResult {
+  if (!result || typeof result !== "object") return false;
+  const record = result as { questions?: unknown };
+  return Array.isArray(record.questions);
+}
+
+function isQuizEvaluation(result: unknown): result is QuizEvalResult {
+  if (!result || typeof result !== "object") return false;
+  const record = result as { score?: unknown; feedback?: unknown };
+  return (
+    typeof record.score === "number" ||
+    Array.isArray(record.feedback as unknown[])
   );
 }
 
@@ -100,11 +112,13 @@ function App() {
   }, [messages]);
 
   useEffect(() => {
-    const defaults: Record<string, string> = {};
-    quizQuestions.forEach((q) => {
-      defaults[q.questionId] = quizAnswers[q.questionId] ?? "";
+    setQuizAnswers((prev) => {
+      const next: Record<string, string> = {};
+      quizQuestions.forEach((q) => {
+        next[q.questionId] = prev[q.questionId] ?? "";
+      });
+      return next;
     });
-    setQuizAnswers(defaults);
   }, [quizQuestions]);
 
   const sessionTitle = useMemo(() => {
@@ -120,11 +134,13 @@ function App() {
     clearQuiz();
     const result = await fetchSession(id);
     if (result.ok && result.session) {
+      const toRole = (role: string): Role =>
+        role === "assistant" ? "assistant" : "user";
       const mapped: Message[] = result.session.messages
         .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m, idx) => ({
           id: `${m.createdAt}-${idx}`,
-          role: m.role,
+          role: toRole(m.role),
           content: m.content,
           createdAt: new Date(m.createdAt).getTime(),
         }))
@@ -174,7 +190,11 @@ function App() {
           return;
         }
         if (evt.type === "AGENT_STEP" && evt.message) {
-          setStatusNote(typeof evt.message === "string" ? evt.message : "Working through your notes…");
+          setStatusNote(
+            typeof evt.message === "string"
+              ? evt.message
+              : "Working through your notes…",
+          );
           return;
         }
         if (evt.result) {
@@ -182,8 +202,8 @@ function App() {
             const questions = evt.result.questions.map((q) => ({
               questionId: q.questionId,
               prompt: q.prompt,
-              type: (q as any).type,
-              options: (q as any).options,
+              type: q.type,
+              options: q.options,
             }));
             setQuizState({ questions, attemptId: evt.result.attemptId });
             updateMessage(assistantId, {
@@ -199,7 +219,11 @@ function App() {
               result: {
                 attemptId: evt.result.attemptId ?? quizAttemptId,
                 score: evt.result.score,
-                feedback: evt.result.feedback,
+                feedback: (evt.result.feedback || []).map((f) => ({
+                  questionId: f.questionId,
+                  result: f.result ?? "Pending",
+                  explanation: f.explanation,
+                })),
                 weakAreas: evt.result.weakAreas,
               },
             });
@@ -254,7 +278,11 @@ function App() {
       result: {
         attemptId: result.result.attemptId ?? quizAttemptId,
         score: result.result.score,
-        feedback: result.result.feedback,
+        feedback: (result.result.feedback || []).map((f) => ({
+          questionId: f.questionId,
+          result: f.result ?? "Pending",
+          explanation: f.explanation,
+        })),
         weakAreas: result.result.weakAreas,
       },
     });
@@ -267,7 +295,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex">
+    <div className="min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex">
       <aside
         className={`${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -296,7 +324,7 @@ function App() {
             >
               <div className="font-medium line-clamp-1">{s.title}</div>
               <div className="text-xs text-slate-500">
-                {loadingSessionId === s.id ? "Loading…" : s.time ?? ""}
+                {loadingSessionId === s.id ? "Loading…" : (s.time ?? "")}
               </div>
             </button>
           ))}
@@ -330,11 +358,18 @@ function App() {
           </div>
           <div className="flex items-center gap-3 text-xs font-semibold text-amber-400">
             {statusNote && <span className="animate-pulse">{statusNote}</span>}
-            {streaming && <span className="px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/30">Streaming…</span>}
+            {streaming && (
+              <span className="px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/30">
+                Streaming…
+              </span>
+            )}
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4" ref={messagesEndRef}>
+        <div
+          className="flex-1 overflow-y-auto px-4 md:px-6 py-4"
+          ref={messagesEndRef}
+        >
           <div className="max-w-4xl mx-auto space-y-4">
             {messages.map((m) => (
               <div
@@ -355,7 +390,8 @@ function App() {
             ))}
             {messages.length === 0 && (
               <div className="text-sm text-slate-400 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                Ask anything about your notes, request a quiz, or paste quiz answers to grade them.
+                Ask anything about your notes, request a quiz, or paste quiz
+                answers to grade them.
               </div>
             )}
 
@@ -363,7 +399,9 @@ function App() {
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 shadow-xl p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-sm font-semibold">Quiz ready ({quizQuestions.length} questions)</div>
+                    <div className="text-sm font-semibold">
+                      Quiz ready ({quizQuestions.length} questions)
+                    </div>
                     <div className="text-xs text-slate-400">
                       Generated from your notes. Fill answers then grade.
                     </div>
@@ -379,15 +417,24 @@ function App() {
 
                 <div className="space-y-4">
                   {quizQuestions.map((q, idx) => {
-                    const feedback = quizResult?.feedback?.find((f) => f.questionId === q.questionId);
+                    const feedback = quizResult?.feedback?.find(
+                      (f) => f.questionId === q.questionId,
+                    );
                     const resultBadge = feedback?.result;
                     return (
-                      <div key={q.questionId} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-2">
+                      <div
+                        key={q.questionId}
+                        className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-2"
+                      >
                         <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
-                          <span className="text-xs text-slate-500">Q{idx + 1}</span>
+                          <span className="text-xs text-slate-500">
+                            Q{idx + 1}
+                          </span>
                           <span>{q.prompt}</span>
                         </div>
-                        {q.type === "mcq" && Array.isArray(q.options) && q.options.length > 0 ? (
+                        {q.type === "mcq" &&
+                        Array.isArray(q.options) &&
+                        q.options.length > 0 ? (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             {q.options.map((opt) => (
                               <label
@@ -405,7 +452,10 @@ function App() {
                                   className="mr-2 accent-emerald-500"
                                   checked={quizAnswers[q.questionId] === opt}
                                   onChange={(e) =>
-                                    setQuizAnswers((prev) => ({ ...prev, [q.questionId]: e.target.value }))
+                                    setQuizAnswers((prev) => ({
+                                      ...prev,
+                                      [q.questionId]: e.target.value,
+                                    }))
                                   }
                                   disabled={grading}
                                 />
@@ -420,7 +470,10 @@ function App() {
                             placeholder="Type your short answer"
                             value={quizAnswers[q.questionId] || ""}
                             onChange={(e) =>
-                              setQuizAnswers((prev) => ({ ...prev, [q.questionId]: e.target.value }))
+                              setQuizAnswers((prev) => ({
+                                ...prev,
+                                [q.questionId]: e.target.value,
+                              }))
                             }
                             disabled={grading}
                           />
@@ -434,7 +487,11 @@ function App() {
                             }`}
                           >
                             {resultBadge}
-                            {feedback?.explanation && <span className="text-slate-400 font-normal">{feedback.explanation}</span>}
+                            {feedback?.explanation && (
+                              <span className="text-slate-400 font-normal">
+                                {feedback.explanation}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -448,7 +505,9 @@ function App() {
                       Score: {Math.round((quizResult.score ?? 0) * 100) / 100}%
                     </div>
                   ) : (
-                    <div className="text-xs text-slate-400">Answer everything, then grade.</div>
+                    <div className="text-xs text-slate-400">
+                      Answer everything, then grade.
+                    </div>
                   )}
                   <button
                     type="button"
