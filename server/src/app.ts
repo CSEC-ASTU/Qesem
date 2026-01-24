@@ -56,8 +56,16 @@ mongoose.connection.on('error', (err) => {
 
 const app = express()
 
-// Enable CORS and JSON body parsing
-app.use(cors())
+// Enable permissive CORS and JSON body parsing
+const corsOptions = {
+	origin: '*',
+	methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+	allowedHeaders: ['Content-Type', 'Authorization'],
+	credentials: false,
+}
+
+app.use(cors(corsOptions))
+app.options('*', cors(corsOptions))
 app.use(express.json())
 
 // Mount routes
