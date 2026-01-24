@@ -76,7 +76,7 @@ export function ChatInput({ disabled, placeholder, onSend }: ChatInputProps) {
         type="button"
         onClick={submit}
         disabled={disabled || text.trim().length === 0}
-        className="h-11 rounded-xl px-4 text-sm font-semibold text-[#020617] shadow-[0_10px_24px_rgba(56,189,248,0.22)] disabled:opacity-60 disabled:cursor-not-allowed bg-[#38bdf8] border border-[#38bdf8] hover:bg-[#5cc9ff] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8]"
+        className="h-11 rounded-xl px-4 text-sm font-semibold text-[#020617] shadow-[0_10px_24px_rgba(56,189,248,0.22)] disabled:opacity-60 disabled:cursor-not-allowed bg-[#38bdf8] border border-[#38bdf8] hover:bg-[#5cc9ff] transition focus-visible:outline  focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8]"
       >
         Send
       </button>

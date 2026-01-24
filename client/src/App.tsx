@@ -646,7 +646,7 @@ function App() {
         <div className="p-4 border-t border-[#1e293b] bg-[#020617]">
           <button
             onClick={handleNewChat}
-            className="w-full rounded-lg py-2.5 text-sm font-semibold text-[#020617] bg-[#38bdf8] border border-[#38bdf8] hover:bg-[#5cc9ff] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8]"
+            className="w-full rounded-lg py-2.5 text-sm font-semibold text-[#020617] bg-[#38bdf8] border border-[outline-2#38bdf8] hover:bg-[#5cc9ff] transition focus-visible:outline  focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8]"
           >
             + New chat
           </button>
@@ -695,7 +695,7 @@ function App() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-semibold text-[#020617] bg-[#38bdf8] border border-[#38bdf8] hover:bg-[#5cc9ff] disabled:opacity-60 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8]"
+                className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-semibold text-[#020617] bg-[#38bdf8] border border-[#38bdf8] hover:bg-[#5cc9ff] disabled:opacity-60 transition focus-visible:outline  focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8]"
                 aria-label="Upload notes (PDF/TXT)"
                 title="Upload notes (PDF/TXT)"
               >
