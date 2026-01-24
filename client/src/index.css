@@ -22,8 +22,9 @@ body {
 	margin: 0;
 	background: var(--bg-main);
 	color: var(--text-primary);
-	font-family: "Inter", "SF Pro Display", "Segoe UI", system-ui, -apple-system,
-		"Segoe UI Emoji", sans-serif;
+	font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+		"Segoe UI", Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
+	font-weight: 400;
 	antialiased: true;
 }
 
@@ -39,4 +40,56 @@ a:hover {
 ::selection {
 	background: var(--accent);
 	color: var(--bg-secondary);
+}
+
+@layer base {
+	html {
+		font-size: 16px;
+	}
+
+	body {
+		line-height: 1.6;
+	}
+
+	h1 {
+		font-size: 1.5rem;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+	}
+
+	h2 {
+		font-size: 1.25rem;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+	}
+
+	h3 {
+		font-size: 1.1rem;
+		font-weight: 500;
+		letter-spacing: -0.01em;
+	}
+
+	p,
+	span,
+	li {
+		font-size: 0.95rem;
+		line-height: 1.6;
+	}
+
+	button,
+	input,
+	textarea {
+		font-size: 0.9rem;
+		font-weight: 500;
+		font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+			"Segoe UI", Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
+	}
+
+	code,
+	pre,
+	code * {
+		font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+			Consolas, "Liberation Mono", monospace;
+		font-size: 0.9rem;
+	}
 }

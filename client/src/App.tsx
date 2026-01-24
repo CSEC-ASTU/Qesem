@@ -654,25 +654,32 @@ function App() {
       </aside>
       <main className="ml-0 md:ml-72 flex flex-col h-screen bg-[#111827] overflow-hidden">
         <header className="sticky top-0 z-20 px-4 md:px-6 py-4 border-b border-[#1e293b] bg-[#020617] backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex-1 space-y-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span
-                  aria-hidden
-                  className="inline-block h-8 w-8 rounded-full bg-[#111827] ring-2 ring-[#1e293b]"
-                />
-                <span className="text-[24px] md:text-[26px] font-semibold text-[#e5e7eb] tracking-tight">
-                  Qesem
-                </span>
-              </div>
-              <div className="text-[18px] md:text-[19px] leading-7 text-[#9ca3af] truncate">
-                {lastUserPrompt}
-              </div>
-              <div className="text-[16px] text-[#9ca3af]">
-                Grounded answers, quizzes, grading
+          <div className="flex flex-wrap items-center justify-between gap-4 md:gap-8">
+            <div className="flex items-start gap-3">
+              <span
+                aria-hidden
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#111827] ring-2 ring-[#1e293b]"
+              >
+                <span className="h-2 w-2 rounded-full bg-[#38bdf8]" />
+              </span>
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[24px] md:text-[26px] font-semibold text-[#e5e7eb] tracking-tight">
+                    Qesem
+                  </span>
+                  {/* <span className="text-xs px-2 py-1 rounded-full bg-[#111827] border border-[#1e293b] text-[#9ca3af] uppercase tracking-[0.08em]">
+                    Study
+                  </span> */}
+                </div>
+                <div className="text-[18px] md:text-[19px] leading-7 text-[#9ca3af] truncate">
+                  {lastUserPrompt}
+                </div>
+                {/* <div className="text-[15px] text-[#9ca3af]">
+                  Grounded answers, quizzes, grading
+                </div> */}
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 md:gap-4">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -688,7 +695,7 @@ function App() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-[#020617] bg-[#38bdf8] border border-[#38bdf8] hover:bg-[#5cc9ff] disabled:opacity-60 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8]"
+                className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-semibold text-[#020617] bg-[#38bdf8] border border-[#38bdf8] hover:bg-[#5cc9ff] disabled:opacity-60 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8]"
                 aria-label="Upload notes (PDF/TXT)"
                 title="Upload notes (PDF/TXT)"
               >
@@ -704,14 +711,14 @@ function App() {
                 </svg>
                 <span>Upload</span>
               </button>
+              {streaming && (
+                <span className="text-xs rounded-full px-2.5 py-1 bg-[#111827] border border-[#38bdf8] text-[#e5e7eb]">
+                  Streaming…
+                </span>
+              )}
               {statusNote && (
                 <span className="text-xs font-medium text-[#9ca3af]">
                   {statusNote}
-                </span>
-              )}
-              {streaming && (
-                <span className="text-xs rounded-full px-2 py-1 bg-[#111827] border border-[#38bdf8] text-[#e5e7eb]">
-                  Streaming…
                 </span>
               )}
             </div>
