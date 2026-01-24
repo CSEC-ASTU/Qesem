@@ -16,7 +16,6 @@
 - [Folder Structure](#folder-structure)
 - [Contribution](#contribution)
 - [License](#license)
-- [Additional Notes](#additional-notes)
 
 ## Overview
 
